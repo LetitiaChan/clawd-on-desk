@@ -17,7 +17,6 @@ const SIDECAR_ENV_TOKEN_FILE = "CLAWD_TG_BOT_TOKEN_FILE";
 const SIDECAR_PATH_ENV = "CLAWD_CC_CONNECT_CLAWD_PATH";
 const SIDECAR_BINARY_BASENAME = "cc-connect-clawd";
 const SIDECAR_RESOURCE_ROOT = path.join("sidecars", "cc-connect-clawd");
-const DEV_FETCH_TARGETS = new Set(["windows-x64", "windows-arm64", "darwin-x64", "darwin-arm64", "linux-x64"]);
 // Note: the sidecar reads the token from the env-file at SIDECAR_ENV_TOKEN_FILE
 // (which itself contains a line like `CLAWD_TG_BOT_TOKEN=<token>`). Clawd's
 // main process MUST NOT pipe a token into the child env directly — that path
@@ -125,14 +124,6 @@ function sidecarResourceRelativePath(options = {}) {
   );
 }
 
-function devSidecarFetchHint(options = {}) {
-  const target = sidecarPlatformArchDir(options);
-  if (DEV_FETCH_TARGETS.has(target)) {
-    return `For source checkouts, run: npm run fetch:sidecars -- --target ${target}`;
-  }
-  return `No pinned Telegram approval sidecar is available for ${target}; set ${SIDECAR_PATH_ENV} to a compatible sidecar executable.`;
-}
-
 function resolveOverrideBinaryPath(rawValue, options = {}) {
   const value = String(rawValue || "").trim();
   if (!value) return "";
@@ -202,7 +193,6 @@ class TelegramApprovalSidecar extends EventEmitter {
     this.clearTimer = options.clearTimeout || clearTimeout;
     this.now = options.now || (() => Date.now());
     this.platform = options.platform || process.platform;
-    this.arch = options.arch || process.arch;
     this.baseEnv = options.baseEnv || process.env;
     this.startupTimeoutMs = options.startupTimeoutMs == null ? DEFAULT_STARTUP_TIMEOUT_MS : Number(options.startupTimeoutMs);
     this.stopGraceMs = options.stopGraceMs == null ? DEFAULT_STOP_GRACE_MS : Number(options.stopGraceMs);
@@ -217,7 +207,7 @@ class TelegramApprovalSidecar extends EventEmitter {
       binaryPath: options.binaryPath,
       env: options.env || this.baseEnv,
       platform: this.platform,
-      arch: this.arch,
+      arch: options.arch || process.arch,
       resourcesPath: options.resourcesPath,
       isPackaged: options.isPackaged,
       fs: this.fs,
@@ -364,10 +354,6 @@ class TelegramApprovalSidecar extends EventEmitter {
         resolve();
       };
       child.once("exit", finish);
-      // On Windows, Node maps SIGTERM to TerminateProcess for child processes,
-      // so the Go sidecar may not run its graceful signal handler there. The
-      // grace window mainly covers POSIX and console-driven Windows exits; a
-      // hard kill is still safe because pending approvals are in-memory.
       this._killChild(child, "SIGTERM");
       this.stopTimer = this.setTimer(() => {
         this._killChild(child, "SIGKILL");
@@ -405,11 +391,7 @@ class TelegramApprovalSidecar extends EventEmitter {
     try {
       if (this.fs.existsSync(this.binaryPath)) return "";
     } catch {}
-    const message = `telegram approval sidecar binary not found: ${this.binaryPath}`;
-    if (this.binaryPathSource === "dev") {
-      return `${message}. ${devSidecarFetchHint({ platform: this.platform, arch: this.arch })}`;
-    }
-    return message;
+    return `telegram approval sidecar binary not found: ${this.binaryPath}`;
   }
 
   _handleStdout(chunk, finishReady, failStartup) {
@@ -565,7 +547,6 @@ module.exports = {
   sidecarArchName,
   sidecarPlatformArchDir,
   sidecarResourceRelativePath,
-  devSidecarFetchHint,
   defaultConfigPath,
   defaultTokenEnvFilePath,
   redactText,

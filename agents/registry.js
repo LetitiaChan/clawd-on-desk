@@ -7,6 +7,7 @@ const copilotCli = require("./copilot-cli");
 const geminiCli = require("./gemini-cli");
 const cursorAgent = require("./cursor-agent");
 const codebuddy = require("./codebuddy");
+const gongfengCopilot = require("./gongfeng-copilot");
 const kiroCli = require("./kiro-cli");
 const kimiCli = require("./kimi-cli");
 const opencode = require("./opencode");
@@ -21,6 +22,7 @@ const AGENTS = [
   geminiCli,
   cursorAgent,
   codebuddy,
+  gongfengCopilot,
   kiroCli,
   kimiCli,
   opencode,
