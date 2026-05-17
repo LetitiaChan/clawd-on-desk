@@ -97,3 +97,33 @@ scripts/*
 
 # Cursor local config (MCP, rules from omc setup)
 .cursor/
+
+# Code review records
+.review/
+
+# Root-level test / verification scratch files
+test-wizard.html
+verify-gongfeng-integration.js
+
+# Environment variable variants (keep .env, also ignore .env.local etc.)
+.env.*
+!.env.example
+
+# Test coverage reports
+coverage/
+
+# VSCode local settings
+.vscode/
+
+# VSCode extension packaging artifacts
+*.vsix
+
+# Editor swap / backup files
+*.swp
+*.swo
+*~
+
+# npm debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

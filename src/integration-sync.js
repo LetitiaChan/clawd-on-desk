@@ -62,6 +62,41 @@ function createIntegrationSyncRuntime(options = {}) {
     }
   }
 
+  function syncGongfengCopilotHooks() {
+    try {
+      if (typeof ctx.syncGongfengCopilotHooksImpl === "function") return ctx.syncGongfengCopilotHooksImpl();
+      const { prepareGongfengCopilotSnippets } = require("../hooks/gongfeng-copilot-install.js");
+      const result = prepareGongfengCopilotSnippets({ silent: true });
+      
+      if (result.status === "plugin_not_installed") {
+        return { status: "skipped", reason: "plugin_not_installed" };
+      }
+      
+      // 如果用户尚未配置任何hook，提示使用向导
+      if (result.existing.found === 0) {
+        console.log(`\n🦊 Clawd: Gongfeng Copilot 检测到插件但未配置钩子`);
+        console.log(`   请运行以下命令生成配置向导:`);
+        console.log(`   node tools/gongfeng-wizard.js`);
+        console.log(`   然后按照向导指引手动配置 11 个事件钩子`);
+        console.log(`   Windows 用户需设置命令执行器路径为 bash.exe`);
+      } else if (result.existing.found < 11) {
+        console.log(`Clawd: gongfeng-copilot 已配置 ${result.existing.found}/11 个钩子`);
+      }
+      
+      return { 
+        status: "ok", 
+        added: Math.max(0, 11 - result.existing.found),
+        updated: 0,
+        removed: 0,
+        configured: result.existing.found,
+        total: 11
+      };
+    } catch (err) {
+      console.warn("Clawd: failed to sync gongfeng-copilot hooks:", err.message);
+      return { status: "error", message: err && err.message ? err.message : "Failed to sync gongfeng-copilot hooks" };
+    }
+  }
+
   function syncKiroHooks() {
     try {
       if (typeof ctx.syncKiroHooksImpl === "function") return ctx.syncKiroHooksImpl();
@@ -256,6 +291,7 @@ function createIntegrationSyncRuntime(options = {}) {
     "gemini-cli": syncGeminiHooks,
     "cursor-agent": syncCursorHooks,
     codebuddy: syncCodeBuddyHooks,
+    "gongfeng-copilot": syncGongfengCopilotHooks,
     "kiro-cli": syncKiroHooks,
     "kimi-cli": syncKimiHooks,
     codex: syncCodexHooks,
@@ -316,6 +352,7 @@ function createIntegrationSyncRuntime(options = {}) {
     syncGeminiHooks,
     syncCursorHooks,
     syncCodeBuddyHooks,
+    syncGongfengCopilotHooks,
     syncKiroHooks,
     syncKimiHooks,
     syncCodexHooks,

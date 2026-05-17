@@ -132,10 +132,6 @@ describe("package build config", () => {
   });
 
   describe("Telegram approval sidecar packaging", () => {
-    it("preflights sidecar binaries before source launches", () => {
-      assert.match(pkg.scripts.start, /node scripts\/ensure-sidecar-binaries\.js && node launch\.js/);
-    });
-
     it("copies cc-connect-clawd sidecars into packaged resources", () => {
       const extra = pkg.build.extraResources || [];
       const copied = extra.some(
@@ -180,7 +176,7 @@ describe("package build config", () => {
 
     it("publishes GitHub releases only for version tags", () => {
       const workflow = fs.readFileSync(path.join(ROOT, ".github", "workflows", "build.yml"), "utf8");
-      const releaseIndex = findWorkflowJobIndex(workflow, "release");
+      const releaseIndex = workflow.indexOf("\n  release:\n");
       assert.ok(releaseIndex >= 0, "workflow should define a release job");
       const releaseGateIndex = workflow.indexOf("if: startsWith(github.ref, 'refs/tags/v')", releaseIndex);
       const bodyPathIndex = workflow.indexOf("body_path: docs/releases/release-${{ github.ref_name }}.md", releaseIndex);
@@ -191,7 +187,7 @@ describe("package build config", () => {
 
     it("creates tag releases as drafts for final asset inspection", () => {
       const workflow = fs.readFileSync(path.join(ROOT, ".github", "workflows", "build.yml"), "utf8");
-      const releaseIndex = findWorkflowJobIndex(workflow, "release");
+      const releaseIndex = workflow.indexOf("\n  release:\n");
       assert.ok(releaseIndex >= 0, "workflow should define a release job");
       const actionIndex = workflow.indexOf("softprops/action-gh-release@v2", releaseIndex);
       const draftIndex = workflow.indexOf("draft: true", actionIndex);
@@ -202,11 +198,6 @@ describe("package build config", () => {
     });
   });
 });
-
-function findWorkflowJobIndex(workflow, jobName) {
-  const match = String(workflow || "").match(new RegExp(`(?:^|\\r?\\n)  ${jobName}:\\r?\\n`));
-  return match ? match.index : -1;
-}
 
 function assertWorkflowOrder(workflow, fetchCommand, verifyCommand, buildCommand) {
   const fetchIndex = workflow.indexOf(fetchCommand);

@@ -8,6 +8,7 @@ const codex = require("../../hooks/codex-install");
 const cursor = require("../../hooks/cursor-install");
 const gemini = require("../../hooks/gemini-install");
 const codebuddy = require("../../hooks/codebuddy-install");
+const gongfengCopilot = require("../../hooks/gongfeng-copilot-install");
 const kiro = require("../../hooks/kiro-install");
 const kimi = require("../../hooks/kimi-install");
 const opencode = require("../../hooks/opencode-install");
@@ -95,6 +96,21 @@ const AGENT_DESCRIPTORS = Object.freeze([
     autoInstall: true,
     marker: "codebuddy-hook.js",
     nested: true,
+  }),
+  Object.freeze({
+    agentId: "gongfeng-copilot",
+    agentName: agentName("gongfeng-copilot"),
+    eventSource: agentEventSource("gongfeng-copilot"),
+    parentDir: gongfengCopilot.DEFAULT_PARENT_DIR,
+    configPath: gongfengCopilot.DEFAULT_CONFIG_PATH,
+    configMode: "file",
+    autoInstall: true,
+    marker: "gongfeng-copilot-hook.js",
+    // Plugin schema is flat (event -> [{ command, display_name, ... }]),
+    // not Claude Code-nested. The shared marker scan still works because
+    // the .sh stub command line contains the marker substring.
+    nested: false,
+    stubDir: gongfengCopilot.DEFAULT_STUB_DIR,
   }),
   Object.freeze({
     agentId: "kiro-cli",
