@@ -1,19 +1,22 @@
 #!/usr/bin/env node
-// Generate shell script snippets for manual hook setup in gongfeng-copilot plugin.
+// Generate shell script snippets for setting up gongfeng-copilot hooks via the
+// plugin's official Hooks UI.
 //
-// The Gongfeng Copilot (CodeBuddy VSCode plugin) (publisher: gongfeng, name: gongfeng-copilot)
-// uses a cloud-synced hooks.json that cannot be modified locally (cloud overrides).
-// Instead, we generate shell script snippets that users can manually paste into
-// the plugin's UI to create persistent hooks.
+// Integration model:
+//   The Gongfeng Copilot (CodeBuddy VSCode plugin) is configured through its
+//   built-in "Hooks 管理" UI. We do not touch the plugin's own config files;
+//   instead, this module produces ready-to-paste shell snippets so the user
+//   can create each hook through the supported UI flow.
 //
-// IMPORTANT: Windows users must configure command_executor_path to bash.exe:
-//   C:\\Program Files\\Git\\bin\\bash.exe
+// IMPORTANT: Windows users must set the plugin's command executor path to a
+// bash.exe (e.g. C:\\Program Files\\Git\\bin\\bash.exe) in the plugin's
+// advanced settings before the snippets can run.
 //
-// Manual setup process:
-//   1. User copies script snippet for each event
-//   2. Pastes into plugin UI → plugin renders .sh file
-//   3. Cloud sync preserves the hook with assigned hook_id
-//   4. Plugin executes .sh via configured bash executor
+// Recommended setup flow:
+//   1. Copy the generated snippet for each event.
+//   2. Paste it into the plugin's Hooks UI (name + trigger event + script).
+//   3. Save — the plugin handles persistence on its side.
+//   4. The plugin invokes the snippet via the configured bash executor.
 
 const fs = require("fs");
 const path = require("path");

@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // Clawd — Gongfeng Copilot Uninstall Helper
 //
-// Mirror of gongfeng-copilot-install.js: since the plugin's hooks.json is
-// cloud-synced and not locally writable, we cannot delete hooks programmatically.
-// This module scans hooks-cache.json for entries whose display_name starts with
-// "Clawd: " and renders an HTML page that walks the user through removing each
-// one via the plugin UI.
+// Companion to gongfeng-copilot-install.js. Hook removal is also handled
+// through the plugin's Hooks UI (matching how they were created), so this
+// module does not modify the plugin's config files directly. Instead, it
+// scans hooks-cache.json for entries whose display_name starts with
+// "Clawd: " and renders an HTML page that walks the user through removing
+// each one via the plugin UI.
 
 const fs = require("fs");
 const path = require("path");

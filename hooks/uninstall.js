@@ -20,7 +20,7 @@ function printHelp() {
     "  -h, --help                                Show this help",
     "",
     "Notes:",
-    "  Gongfeng-Copilot's hooks.json is cloud-synced and not locally writable.",
+    "  Gongfeng-Copilot hooks are managed through the plugin's Hooks UI.",
     "  The wizard scans hooks-cache.json and renders an HTML page that walks you",
     "  through removing each Clawd:* hook via the plugin UI.",
   ].join("\n"));

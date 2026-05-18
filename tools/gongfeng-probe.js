@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // gongfeng-copilot hook 协议探针 (Phase 1)
 // -----------------------------------------------------------------------------
-// 目的：在不修改 Clawd 主代码的前提下，向 ~/.gongfeng-copilot/hooks/hooks.json
-// 注入 11 个临时 hook，使其把 stdin / argv / env / shell 等信息原样 dump 到
-// 日志文件，从而验证：
-//   1. 11 个事件中，哪些会真的触发？
-//   2. 每个事件实际收到的 stdin payload 字段长什么样？
-//   3. Windows 上 "command_executor_path" 为空时，stub 是被什么 shell 执行的？
-//   4. 没有 hook_id 的本地条目会不会被云端同步删除（运行后看 hooks.json 的变化）。
-//   5. hooks_md5 字段不更新会不会导致插件认为本地 hook 失效？
+// 目的：作为本仓库兼容层的开发辅助工具，向 ~/.gongfeng-copilot/hooks/hooks.json
+// 注入 11 个临时 hook，把 stdin / argv / env / shell 等公开可观察信息原样
+// dump 到日志文件，用来：
+//   1. 确认 11 个事件中哪些会在实际使用中被触发；
+//   2. 采集每个事件 stdin payload 的字段形状，便于 Clawd 这边正确解析；
+//   3. 在 Windows 上验证当前的 bash 执行器配置是否生效；
+//   4. 检查本地新增条目在插件后续运行后是否仍然保留（用于决定是否需要
+//      引导用户改用 UI 创建 hook）。
 //
 // 用法：
 //   node tools/gongfeng-probe.js install     # 安装探针
@@ -79,16 +79,15 @@ function writeJsonAtomic(filePath, obj) {
 // stub 脚本生成
 // ----------------------------------------------------------------------------
 //
-// 关键点：插件运行 `command` 字段时使用的解释器目前未知（Windows 上 hooks.json
-// 里 command_executor_path 为空字符串，可能是 git-bash、wsl-bash 或 cmd）。
-// 我们让 stub 兼容 bash 执行：
+// 设计要点：用户在插件高级设置里配置的 bash 执行器路径不一定相同（git-bash /
+// msys / wsl 等都可能），为最大化兼容性，stub 采用：
 //   - shebang 写 #!/usr/bin/env bash
 //   - 整个脚本只用 POSIX 兼容语法
-//   - 如果 bash 不可用导致 stub 跑不起来，hooks.json 里一定会有错误日志（插件
-//     一般会显示），这本身也是探针要采集的信息。
+//   - 若 bash 不可用导致 stub 无法运行，插件 UI 会展示对应错误，便于用户自查
+//     执行器路径配置。
 //
 // stub 做的事：
-//   1. 把 stdin 全文捕获为变量 STDIN
+//   1. 把 stdin 全文捕获到临时文件
 //   2. 把 argv、所有 ${HOOK_*} 类环境变量、$SHELL、$0、PATH 写到日志
 //   3. 输出 "{}" 到 stdout（不 gating，让插件继续走默认策略）
 //   4. exit 0
