@@ -48,6 +48,7 @@ docs/**
 !docs/releases/release-v0.6.3.md
 !docs/releases/release-v0.7.1.md
 !docs/releases/release-v0.8.0.md
+!docs/releases/release-template.md
 
 # Temp files from testing
 .tmp_*
@@ -94,6 +95,9 @@ scripts/*
 !scripts/verify-sidecar-binaries.js
 !scripts/fetch-sidecar-binaries.js
 !scripts/check-syntax.js
+!scripts/check-changelog.js
+!scripts/check-rule-consistency.js
+!scripts/release.js
 
 # oh-my-cursor state
 .omc/

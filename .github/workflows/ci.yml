@@ -67,3 +67,6 @@ jobs:
 
       - name: Unit tests
         run: npm test
+
+      - name: CHANGELOG update check
+        run: npm run check:changelog
