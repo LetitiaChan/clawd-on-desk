@@ -22,7 +22,10 @@ const { createPidResolver, readStdinJson, getPlatformConfig } = require("./share
 const HOOK_TO_STATE = {
   beforeSubmitPrompt:         { state: "thinking",     event: "UserPromptSubmit" },
   afterAgentThought:          { state: "thinking",     event: "AfterAgentThought" },
-  afterAgentResponse:         { state: "idle",         event: "AfterAgentResponse" },
+  // afterAgentResponse 触发于"模型一次回答输出之后"，此时整轮对话尚未结束（stop 还没到）。
+  // 之前映射为 idle 会让桌宠在"纯文本输出"阶段被打回空闲，看起来像没反应；改为 thinking
+  // 与 cursor-hook / codebuddy-hook 的语义一致：保持"忙"状态直到 stop 触发 attention（成功动画）。
+  afterAgentResponse:         { state: "thinking",     event: "AfterAgentResponse" },
   beforeShellExecution:       { state: "working",      event: "PreToolUse" },
   afterShellExecution:        { state: "working",      event: "PostToolUse" },
   beforeMCPExecution:         { state: "working",      event: "PreToolUse" },
