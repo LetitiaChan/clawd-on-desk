@@ -13,6 +13,7 @@ describe("Agent Registry", () => {
       "gemini-cli",
       "cursor-agent",
       "codebuddy",
+      "gongfeng-copilot",
       "kiro-cli",
       "kimi-cli",
       "opencode",

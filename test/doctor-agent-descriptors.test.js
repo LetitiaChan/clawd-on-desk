@@ -19,6 +19,7 @@ describe("doctor agent descriptors", () => {
         "cursor-agent",
         "gemini-cli",
         "codebuddy",
+        "gongfeng-copilot",
         "kiro-cli",
         "kimi-cli",
         "opencode",
