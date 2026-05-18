@@ -1,6 +1,6 @@
 name: CI
 
-# 远端兜底：在 push / PR 时跑语法校验 + 单元测试。
+# 远端兜底：在 push / PR 时跑语法校验 + 单元测试（ubuntu-latest + windows-latest）。
 #
 # 触发器设计：
 # - push 任意分支：开发分支也跑，hotfix 分支也能拿到反馈。
