@@ -203,8 +203,119 @@ async function repairAgentIntegration(payload, deps) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// gongfeng-copilot wizard generators
+//
+// Unlike other agents, gongfeng-copilot's hooks.json is cloud-synced —
+// Clawd cannot write it directly and must walk the user through pasting
+// 11 hook snippets via the plugin UI. The wizard HTML is the bridge.
+// These two actions just regenerate the HTML files (snippets / uninstall
+// list) and return the on-disk path. The renderer then opens it via
+// settingsAPI.openLocalFile().
+//
+// Both actions are read-only with respect to settings store — they do
+// not produce a `commit`, so the IPC layer simply forwards the metadata
+// (status / outputPath / found / total) back to the renderer.
+// ─────────────────────────────────────────────────────────────────────────
+
+function generateGongfengCopilotWizard() {
+  let prepareGongfengCopilotSnippets;
+  let generateHtmlWizard;
+  try {
+    ({ prepareGongfengCopilotSnippets, generateHtmlWizard } = require("../hooks/gongfeng-copilot-install.js"));
+  } catch (err) {
+    return {
+      status: "error",
+      message: `generateGongfengCopilotWizard: failed to load helpers: ${err && err.message}`,
+    };
+  }
+
+  let result;
+  try {
+    result = prepareGongfengCopilotSnippets({ silent: true });
+  } catch (err) {
+    return {
+      status: "error",
+      message: `generateGongfengCopilotWizard: ${err && err.message}`,
+    };
+  }
+
+  if (!result || result.status === "plugin_not_installed") {
+    return {
+      status: "error",
+      reason: "plugin_not_installed",
+      message: "Gongfeng Copilot plugin is not installed (~/.gongfeng-copilot/ missing)",
+    };
+  }
+
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    const os = require("os");
+    const html = generateHtmlWizard(result);
+    const outputDir = path.join(os.tmpdir(), "clawd-gongfeng");
+    fs.mkdirSync(outputDir, { recursive: true });
+    const outputPath = path.join(outputDir, "gongfeng-wizard.html");
+    fs.writeFileSync(outputPath, html, "utf-8");
+    return {
+      status: "ok",
+      outputPath,
+      configured: (result.existing && result.existing.found) || 0,
+      total: 11,
+    };
+  } catch (err) {
+    return {
+      status: "error",
+      message: `generateGongfengCopilotWizard: write failed: ${err && err.message}`,
+    };
+  }
+}
+
+function generateGongfengCopilotUninstallWizard() {
+  let prepareGongfengCopilotUninstall;
+  try {
+    ({ prepareGongfengCopilotUninstall } = require("../hooks/gongfeng-copilot-uninstall.js"));
+  } catch (err) {
+    return {
+      status: "error",
+      message: `generateGongfengCopilotUninstallWizard: failed to load helpers: ${err && err.message}`,
+    };
+  }
+
+  try {
+    const path = require("path");
+    const os = require("os");
+    const outputDir = path.join(os.tmpdir(), "clawd-gongfeng");
+    const outputPath = path.join(outputDir, "gongfeng-uninstall.html");
+    const result = prepareGongfengCopilotUninstall({
+      silent: true,
+      writeHtml: true,
+      output: outputPath,
+    });
+    if (!result || result.status === "plugin_not_installed") {
+      return {
+        status: "error",
+        reason: "plugin_not_installed",
+        message: "Gongfeng Copilot plugin is not installed (~/.gongfeng-copilot/ missing)",
+      };
+    }
+    return {
+      status: "ok",
+      outputPath: result.outputPath || outputPath,
+      found: result.found || 0,
+    };
+  } catch (err) {
+    return {
+      status: "error",
+      message: `generateGongfengCopilotUninstallWizard: ${err && err.message}`,
+    };
+  }
+}
+
 module.exports = {
   setAgentFlag,
   setAgentPermissionMode,
   repairAgentIntegration,
+  generateGongfengCopilotWizard,
+  generateGongfengCopilotUninstallWizard,
 };

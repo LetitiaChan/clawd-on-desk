@@ -81,6 +81,8 @@ const {
   setAgentFlag,
   setAgentPermissionMode,
   repairAgentIntegration,
+  generateGongfengCopilotWizard,
+  generateGongfengCopilotUninstallWizard,
 } = require("./settings-actions-agents");
 const {
   ANIMATION_OVERRIDES_EXPORT_VERSION,
@@ -854,6 +856,8 @@ const commandRegistry = {
   resetAllShortcuts,
   setAgentFlag,
   setAgentPermissionMode,
+  generateGongfengCopilotWizard,
+  generateGongfengCopilotUninstallWizard,
   setAllBubblesHidden,
   setBubbleCategoryEnabled,
   setSessionAlias,

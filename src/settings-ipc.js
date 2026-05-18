@@ -398,6 +398,49 @@ function registerSettingsIpc(options = {}) {
     }
   });
 
+  // Open a generated local file (e.g. gongfeng-wizard.html) in the user's
+  // default handler. Restricted to absolute paths under the OS tmp dir or
+  // the app's userData dir so the renderer cannot trick us into opening
+  // arbitrary system files.
+  handle("settings:open-local-file", async (_event, filePath) => {
+    if (typeof filePath !== "string" || !filePath) {
+      return { status: "error", message: "Invalid path" };
+    }
+    let absPath;
+    try {
+      absPath = defaultPath.resolve(filePath);
+    } catch (err) {
+      return { status: "error", message: (err && err.message) || "resolve failed" };
+    }
+    const os = require("os");
+    const tmpDir = defaultPath.resolve(os.tmpdir());
+    const userData = (() => {
+      try {
+        const { app } = require("electron");
+        return app && typeof app.getPath === "function"
+          ? defaultPath.resolve(app.getPath("userData"))
+          : null;
+      } catch (e) {
+        return null;
+      }
+    })();
+    const allowed = [tmpDir, userData].filter(Boolean);
+    const isAllowed = allowed.some((root) => {
+      const rel = defaultPath.relative(root, absPath);
+      return rel && !rel.startsWith("..") && !defaultPath.isAbsolute(rel);
+    });
+    if (!isAllowed) {
+      return { status: "error", message: "Path is outside allowed directories" };
+    }
+    try {
+      const message = await shell.openPath(absPath);
+      if (message) return { status: "error", message };
+      return { status: "ok" };
+    } catch (err) {
+      return { status: "error", message: (err && err.message) || String(err) };
+    }
+  });
+
   return {
     dispose() {
       while (disposers.length) {

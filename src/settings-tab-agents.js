@@ -134,7 +134,88 @@
         },
       }));
     }
+    if (agent.id === "gongfeng-copilot") {
+      rows.push(buildGongfengWizardRow(agent, "generateGongfengCopilotWizard", {
+        labelKey: "rowGongfengGenerateWizard",
+        descKey: "rowGongfengGenerateWizardDesc",
+        buttonKey: "btnGongfengGenerateWizard",
+      }));
+      rows.push(buildGongfengWizardRow(agent, "generateGongfengCopilotUninstallWizard", {
+        labelKey: "rowGongfengGenerateUninstall",
+        descKey: "rowGongfengGenerateUninstallDesc",
+        buttonKey: "btnGongfengGenerateUninstall",
+      }));
+    }
     return rows;
+  }
+
+  function buildGongfengWizardRow(agent, action, { labelKey, descKey, buttonKey }) {
+    const row = document.createElement("div");
+    row.className = "row row-sub";
+
+    const text = document.createElement("div");
+    text.className = "row-text";
+    const label = document.createElement("span");
+    label.className = "row-label";
+    label.textContent = t(labelKey);
+    const desc = document.createElement("span");
+    desc.className = "row-desc";
+    desc.textContent = t(descKey);
+    text.appendChild(label);
+    text.appendChild(desc);
+    row.appendChild(text);
+
+    const ctrl = document.createElement("div");
+    ctrl.className = "row-control";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "soft-btn";
+    btn.textContent = t(buttonKey);
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      if (btn.disabled) return;
+      btn.disabled = true;
+      btn.classList.add("pending");
+      window.settingsAPI.command(action, {})
+        .then((result) => {
+          if (!result || result.status !== "ok") {
+            const reason = result && result.reason;
+            const msg = reason === "plugin_not_installed"
+              ? t("toastGongfengPluginMissing")
+              : t("toastSaveFailed") + ((result && result.message) || "unknown error");
+            ops.showToast(msg, { error: true });
+            return;
+          }
+          const outputPath = result && result.outputPath;
+          if (!outputPath) {
+            ops.showToast(t("toastGongfengWizardOk"));
+            return;
+          }
+          window.settingsAPI.openLocalFile(outputPath).then((openResult) => {
+            if (openResult && openResult.status === "ok") {
+              ops.showToast(t("toastGongfengWizardOk"));
+            } else {
+              ops.showToast(
+                t("toastGongfengWizardOpenFailed")
+                  + ((openResult && openResult.message) || "unknown error"),
+                { error: true }
+              );
+            }
+          }).catch((err) => {
+            ops.showToast(t("toastGongfengWizardOpenFailed") + (err && err.message), { error: true });
+          });
+        })
+        .catch((err) => {
+          ops.showToast(t("toastSaveFailed") + (err && err.message), { error: true });
+        })
+        .finally(() => {
+          btn.disabled = false;
+          btn.classList.remove("pending");
+        });
+    });
+    ctrl.appendChild(btn);
+    row.appendChild(ctrl);
+    return row;
   }
 
   function computeAgentSubSwitchDisabled(agentId, flag) {

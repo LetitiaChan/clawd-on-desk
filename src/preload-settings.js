@@ -78,6 +78,7 @@ contextBridge.exposeInMainWorld("settingsAPI", {
   getAboutInfo: () => ipcRenderer.invoke("settings:get-about-info"),
   checkForUpdates: () => ipcRenderer.invoke("settings:check-for-updates"),
   openExternal: (url) => ipcRenderer.invoke("settings:open-external", url),
+  openLocalFile: (filePath) => ipcRenderer.invoke("settings:open-local-file", filePath),
   listThemes: () => ipcRenderer.invoke("settings:list-themes"),
   openUserThemesDir: () => ipcRenderer.invoke("settings:open-user-themes-dir"),
   importUserThemeZip: () => ipcRenderer.invoke("settings:import-user-theme-zip"),

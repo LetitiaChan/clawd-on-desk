@@ -8,6 +8,8 @@ const agentCommands = require("../src/settings-actions-agents");
 
 test("settings agent actions expose the command surface", () => {
   assert.deepStrictEqual(Object.keys(agentCommands).sort(), [
+    "generateGongfengCopilotUninstallWizard",
+    "generateGongfengCopilotWizard",
     "repairAgentIntegration",
     "setAgentFlag",
     "setAgentPermissionMode",
