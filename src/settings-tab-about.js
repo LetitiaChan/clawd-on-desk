@@ -189,10 +189,32 @@
 
       if (safe.repoUrl) {
         infoSection.appendChild(buildAboutLinkRow(
-          t("aboutRepositoryLabel"),
+          t("aboutForkRepoLabel"),
           safe.repoUrl,
           safe.repoUrl.replace(/^https?:\/\//, "")
         ));
+      }
+
+      if (safe.upstreamRepoUrl) {
+        infoSection.appendChild(buildAboutLinkRow(
+          t("aboutUpstreamRepoLabel"),
+          safe.upstreamRepoUrl,
+          safe.upstreamRepoUrl.replace(/^https?:\/\//, "")
+        ));
+      }
+
+      if (safe.repoUrl && safe.upstreamRepoUrl) {
+        const syncRow = document.createElement("div");
+        syncRow.className = "about-info-row";
+        const syncLabel = document.createElement("div");
+        syncLabel.className = "about-info-label";
+        syncLabel.textContent = "";
+        const syncValue = document.createElement("div");
+        syncValue.className = "about-info-value about-sync-note";
+        syncValue.textContent = t("aboutForkSyncNote");
+        syncRow.appendChild(syncLabel);
+        syncRow.appendChild(syncValue);
+        infoSection.appendChild(syncRow);
       }
 
       if (safe.license) {

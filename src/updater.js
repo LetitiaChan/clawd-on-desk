@@ -5,7 +5,7 @@ const fs = require("fs");
 const electron = require("electron");
 
 const isMac = process.platform === "darwin";
-const RELEASES_LATEST_URL = "https://github.com/rullerzhou-afk/clawd-on-desk/releases/latest";
+const RELEASES_LATEST_URL = "https://github.com/LetitiaChan/clawd-on-desk/releases/latest";
 
 function makeTranslate(ctx) {
   return (key, fallback) => {
@@ -267,7 +267,7 @@ function initUpdater(ctx, deps = {}) {
     return new Promise((resolve, reject) => {
       const req = httpsGet({
         hostname: "api.github.com",
-        path: "/repos/rullerzhou-afk/clawd-on-desk/releases/latest",
+path: "/repos/LetitiaChan/clawd-on-desk/releases/latest",
         headers: { "User-Agent": "Clawd-on-Desk" },
       }, (res) => {
         let data = "";
