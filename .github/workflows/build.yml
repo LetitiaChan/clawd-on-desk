@@ -79,5 +79,6 @@ jobs:
         with:
           files: artifacts/*
           body_path: docs/releases/release-${{ github.ref_name }}.md
-          draft: true
+          fail_on_unmatched_files: false
+          draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}

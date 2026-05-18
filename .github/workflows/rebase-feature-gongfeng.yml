@@ -1,0 +1,117 @@
+name: Rebase feature/gongfeng onto main
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  rebase:
+    runs-on: ubuntu-latest
+    env:
+      FEATURE_BRANCH: feature/gongfeng
+      BASE_BRANCH: main
+    steps:
+      - name: Checkout repo (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Verify feature branch exists on origin
+        id: check_branch
+        run: |
+          if git ls-remote --exit-code --heads origin "${FEATURE_BRANCH}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::origin/${FEATURE_BRANCH} not found, skip rebase."
+          fi
+
+      - name: Checkout feature branch
+        if: steps.check_branch.outputs.exists == 'true'
+        run: |
+          git fetch origin "${FEATURE_BRANCH}:${FEATURE_BRANCH}"
+          git checkout "${FEATURE_BRANCH}"
+
+      - name: Try rebase onto main
+        if: steps.check_branch.outputs.exists == 'true'
+        id: rebase
+        run: |
+          set +e
+          git rebase "origin/${BASE_BRANCH}"
+          STATUS=$?
+          set -e
+          if [ $STATUS -eq 0 ]; then
+            echo "result=success" >> "$GITHUB_OUTPUT"
+          else
+            git rebase --abort || true
+            echo "result=conflict" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push rebased feature branch (success)
+        if: steps.rebase.outputs.result == 'success'
+        run: |
+          # 检查是否真的需要推送（rebase 后 SHA 是否变化）
+          LOCAL_SHA=$(git rev-parse HEAD)
+          REMOTE_SHA=$(git rev-parse "origin/${FEATURE_BRANCH}")
+          if [ "$LOCAL_SHA" = "$REMOTE_SHA" ]; then
+            echo "feature/${FEATURE_BRANCH} already up-to-date with main, no push needed."
+          else
+            git push --force-with-lease origin "${FEATURE_BRANCH}"
+            echo "Rebased ${FEATURE_BRANCH} onto ${BASE_BRANCH} and pushed."
+          fi
+
+      - name: Open issue on conflict
+        if: steps.rebase.outputs.result == 'conflict'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MAIN_SHORT=$(git rev-parse --short "origin/${BASE_BRANCH}")
+          FEAT_SHORT=$(git rev-parse --short "origin/${FEATURE_BRANCH}")
+
+          # 如果已有未关闭的同类 issue，避免重复
+          EXISTING=$(gh issue list \
+            --repo "$GITHUB_REPOSITORY" \
+            --state open \
+            --search "in:title \"rebase ${FEATURE_BRANCH}\"" \
+            --json number \
+            --jq '.[0].number' || true)
+
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "再次尝试 rebase \`${FEATURE_BRANCH}\` onto \`${BASE_BRANCH}@${MAIN_SHORT}\` 失败（feature head: ${FEAT_SHORT}）。"
+            exit 0
+          fi
+
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Rebase ${FEATURE_BRANCH} onto ${BASE_BRANCH} failed" \
+            --body "$(cat <<EOF
+          自动 rebase \`${FEATURE_BRANCH}\` 到最新 \`${BASE_BRANCH}\` (${MAIN_SHORT}) 时出现冲突，需要人工处理。
+
+          请在本地执行：
+
+          \`\`\`bash
+          git fetch origin
+          git checkout ${FEATURE_BRANCH}
+          git rebase origin/${BASE_BRANCH}
+          # 解决冲突后：
+          git rebase --continue
+          git push --force-with-lease origin ${FEATURE_BRANCH}
+          \`\`\`
+
+          - base: \`${BASE_BRANCH}@${MAIN_SHORT}\`
+          - feature head: \`${FEATURE_BRANCH}@${FEAT_SHORT}\`
+          EOF
+          )"

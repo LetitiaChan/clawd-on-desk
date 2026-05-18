@@ -1,0 +1,106 @@
+name: Sync Upstream Main
+
+on:
+  schedule:
+    # 每 6 小时检查一次上游 main 是否有更新（UTC 时间）
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      UPSTREAM_REPO: rullerzhou-afk/clawd-on-desk
+      UPSTREAM_BRANCH: main
+      LOCAL_BRANCH: main
+    steps:
+      - name: Checkout fork (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ env.LOCAL_BRANCH }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
+          git fetch upstream "${UPSTREAM_BRANCH}"
+
+      - name: Determine relation between local and upstream
+        id: cmp
+        run: |
+          LOCAL_SHA=$(git rev-parse HEAD)
+          UPSTREAM_SHA=$(git rev-parse "upstream/${UPSTREAM_BRANCH}")
+          echo "local_sha=$LOCAL_SHA" >> "$GITHUB_OUTPUT"
+          echo "upstream_sha=$UPSTREAM_SHA" >> "$GITHUB_OUTPUT"
+
+          if [ "$LOCAL_SHA" = "$UPSTREAM_SHA" ]; then
+            echo "status=up_to_date" >> "$GITHUB_OUTPUT"
+          elif git merge-base --is-ancestor "$LOCAL_SHA" "$UPSTREAM_SHA"; then
+            # local 是 upstream 的祖先 -> 可以 fast-forward
+            echo "status=fast_forward" >> "$GITHUB_OUTPUT"
+          else
+            # 历史分叉
+            echo "status=diverged" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Already up to date
+        if: steps.cmp.outputs.status == 'up_to_date'
+        run: echo "Local main is identical to upstream/${UPSTREAM_BRANCH}, nothing to do."
+
+      - name: Fast-forward push
+        if: steps.cmp.outputs.status == 'fast_forward'
+        run: |
+          git merge --ff-only "upstream/${UPSTREAM_BRANCH}"
+          git push origin "${LOCAL_BRANCH}"
+
+      - name: Create sync branch & PR (diverged history)
+        if: steps.cmp.outputs.status == 'diverged'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SYNC_BRANCH="chore/sync-upstream-$(date -u +%Y%m%d-%H%M%S)"
+          git checkout -b "$SYNC_BRANCH" "upstream/${UPSTREAM_BRANCH}"
+          git push origin "$SYNC_BRANCH"
+
+          UPSTREAM_SHORT=$(git rev-parse --short "upstream/${UPSTREAM_BRANCH}")
+          LOCAL_SHORT=$(git rev-parse --short "origin/${LOCAL_BRANCH}")
+
+          # 若已有同名 sync PR 处于 open 状态，则跳过
+          EXISTING=$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --state open \
+            --search "in:title \"sync upstream\"" \
+            --json number \
+            --jq '.[0].number' || true)
+
+          if [ -n "$EXISTING" ]; then
+            echo "Already has open sync PR #$EXISTING, push branch only."
+            exit 0
+          fi
+
+          gh pr create \
+            --repo "$GITHUB_REPOSITORY" \
+            --base "${LOCAL_BRANCH}" \
+            --head "$SYNC_BRANCH" \
+            --title "chore: sync upstream/${UPSTREAM_BRANCH} (${UPSTREAM_SHORT})" \
+            --body "$(cat <<EOF
+          自动同步上游 \`${UPSTREAM_REPO}\` 的 \`${UPSTREAM_BRANCH}\` 分支。
+
+          - 本地 main: \`${LOCAL_SHORT}\`
+          - 上游 main: \`${UPSTREAM_SHORT}\`
+          - 检测结果：历史分叉，无法 fast-forward，需要人工处理 merge。
+
+          请检查冲突后合并，合并后 \`auto-tag\` workflow 会读取 \`package.json\` 中的 version，
+          若与最新 tag 不一致则会自动打 tag 并触发各平台打包发布。
+          EOF
+          )"
