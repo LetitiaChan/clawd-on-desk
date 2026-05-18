@@ -93,6 +93,7 @@ scripts/*
 !scripts/export-agent-icons.js
 !scripts/verify-sidecar-binaries.js
 !scripts/fetch-sidecar-binaries.js
+!scripts/check-syntax.js
 
 # oh-my-cursor state
 .omc/

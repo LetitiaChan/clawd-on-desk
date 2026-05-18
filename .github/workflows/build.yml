@@ -6,6 +6,11 @@ on:
       - "v*"
   workflow_dispatch:
 
+# 同 tag 重推时不并发争抢 release job；不取消正在跑的 build job，避免 artifact 中途丢失。
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -14,7 +19,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install
+          cache: "npm"
+      - run: npm ci
       - run: npm test
       - run: npm run fetch:sidecars -- --target windows-x64,windows-arm64
       - run: node scripts/verify-sidecar-binaries.js prebuild:win:all
@@ -33,7 +39,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install
+          cache: "npm"
+      - run: npm ci
+      - run: npm test
       - run: npm run fetch:sidecars -- --target darwin-x64,darwin-arm64
       - run: node scripts/verify-sidecar-binaries.js prebuild:mac
       - run: npx electron-builder --mac --publish never
@@ -51,7 +59,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install
+          cache: "npm"
+      - run: npm ci
+      - run: npm test
       - run: npm run fetch:sidecars -- --target linux-x64
       - run: node scripts/verify-sidecar-binaries.js prebuild:linux
       - run: npx electron-builder --linux --publish never
@@ -71,6 +81,14 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      - name: Verify release notes file exists
+        run: |
+          NOTES="docs/releases/release-${{ github.ref_name }}.md"
+          if [ ! -f "$NOTES" ]; then
+            echo "::error::Release notes file '$NOTES' is missing. Per project-continuity rule §3 step 3, this file must exist before pushing the tag."
+            exit 1
+          fi
+          echo "Release notes found at $NOTES"
       - uses: actions/download-artifact@v4
         with:
           path: artifacts

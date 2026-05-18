@@ -1,0 +1,69 @@
+name: CI
+
+# 远端兜底：在 push / PR 时跑语法校验 + 单元测试。
+#
+# 触发器设计：
+# - push 任意分支：开发分支也跑，hotfix 分支也能拿到反馈。
+# - PR 到 main：合主前再跑一遍，确保 PR 状态可见。
+# - 路径过滤：纯文档/规则改动豁免（与 .codebuddy/rules/project-continuity.mdc §4.1 一致）。
+#
+# 与 build.yml 的分工：
+# - ci.yml：Bug 修复链路的远端兜底（`npm test` + `npm run check:syntax`）。
+# - build.yml：仅在 push tag `v*` 或 workflow_dispatch 时触发，做 electron-builder 打包。
+#
+# Bug 修复流程的 CI 验证（规则二第 6 步）现在 = 等待本 workflow ✅。
+
+on:
+  push:
+    branches:
+      - "**"
+    paths-ignore:
+      - "AGENT-PROGRESS.md"
+      - "CHANGELOG.md"
+      - "docs/**"
+      - ".codebuddy/**"
+      - ".review/**"
+      - "*.md"
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - "AGENT-PROGRESS.md"
+      - "CHANGELOG.md"
+      - "docs/**"
+      - ".codebuddy/**"
+      - ".review/**"
+      - "*.md"
+  workflow_dispatch:
+
+# 同分支多次推送时取消旧 run，节省额度。
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20 (with npm cache)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies (npm ci)
+        run: npm ci
+
+      - name: Static syntax & require check
+        run: npm run check:syntax
+
+      - name: Unit tests
+        run: npm test

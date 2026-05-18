@@ -1,0 +1,50 @@
+# Dependabot configuration for clawd-on-desk
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# 设计原则：
+# - npm 依赖：周扫，限制 PR 数量；忽略 Electron / electron-builder 主版本（手动评审）。
+# - github-actions：周扫，自动跟进 v4→v5 这类 minor/patch；major 同样手动评审。
+# - 所有 PR 必走 ci.yml 的 npm test + check:syntax。
+# - PR 标签便于在 GitHub UI 上批量过滤。
+
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "npm"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    ignore:
+      # Electron 主版本升级影响 BrowserWindow / 安全模型，必须人工评审。
+      - dependency-name: "electron"
+        update-types: ["version-update:semver-major"]
+      # electron-builder 主版本升级影响打包链路（NSIS、签名、自动更新清单格式），人工评审。
+      - dependency-name: "electron-builder"
+        update-types: ["version-update:semver-major"]
+      # electron-updater 与 electron-builder 必须配套升级，主版本同上。
+      - dependency-name: "electron-updater"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
