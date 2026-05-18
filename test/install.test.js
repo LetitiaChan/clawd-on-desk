@@ -215,7 +215,15 @@ describe("Claude version detection helpers", () => {
     assert.deepStrictEqual(candidates, [path.join(optDir, "claude")]);
   });
 
-  it("collects Claude package.json candidates from sibling node_modules and realpath targets", () => {
+  it(
+    "collects Claude package.json candidates from sibling node_modules and realpath targets",
+    {
+      skip:
+        process.platform !== "win32"
+          ? "hardcoded Windows path literals; path.dirname/path.join only honor backslashes on win32"
+          : false,
+    },
+    () => {
     const candidatePath = "C:\\Users\\Tester\\AppData\\Roaming\\npm\\claude.cmd";
     const candidateDir = path.dirname(candidatePath);
     const siblingPackageJson = path.join(candidateDir, "node_modules", "@anthropic-ai", "claude-code", "package.json");
@@ -246,7 +254,15 @@ describe("Claude version detection helpers", () => {
     ]);
   });
 
-  it("collects Claude package.json candidates asynchronously", async () => {
+  it(
+    "collects Claude package.json candidates asynchronously",
+    {
+      skip:
+        process.platform !== "win32"
+          ? "hardcoded Windows path literals; path.dirname/path.join only honor backslashes on win32"
+          : false,
+    },
+    async () => {
     const candidatePath = "C:\\Users\\Tester\\AppData\\Roaming\\npm\\claude.cmd";
     const candidateDir = path.dirname(candidatePath);
     const siblingPackageJson = path.join(candidateDir, "node_modules", "@anthropic-ai", "claude-code", "package.json");
@@ -280,7 +296,15 @@ describe("Claude version detection helpers", () => {
     ]);
   });
 
-  it("skips reading unusually large shim files", () => {
+  it(
+    "skips reading unusually large shim files",
+    {
+      skip:
+        process.platform !== "win32"
+          ? "hardcoded Windows path literals; path.dirname/path.join only honor backslashes on win32"
+          : false,
+    },
+    () => {
     const candidatePath = "C:\\Users\\Tester\\AppData\\Roaming\\npm\\claude.cmd";
     const candidateDir = path.dirname(candidatePath);
     const siblingPackageJson = path.join(candidateDir, "node_modules", "@anthropic-ai", "claude-code", "package.json");
@@ -361,7 +385,15 @@ describe("Claude version detection helpers", () => {
     );
   });
 
-  it("returns the first valid fallback version info from candidate package.json files", () => {
+  it(
+    "returns the first valid fallback version info from candidate package.json files",
+    {
+      skip:
+        process.platform !== "win32"
+          ? "hardcoded Windows path literals; path.dirname/path.join only honor backslashes on win32"
+          : false,
+    },
+    () => {
     const candidatePath = "C:\\Users\\Tester\\AppData\\Roaming\\npm\\claude.cmd";
     const candidateDir = path.dirname(candidatePath);
     const siblingPackageJson = path.join(candidateDir, "node_modules", "@anthropic-ai", "claude-code", "package.json");
@@ -400,7 +432,15 @@ describe("Claude version detection helpers", () => {
     });
   });
 
-  it("returns the first valid async fallback version info from candidate package.json files", async () => {
+  it(
+    "returns the first valid async fallback version info from candidate package.json files",
+    {
+      skip:
+        process.platform !== "win32"
+          ? "hardcoded Windows path literals; path.dirname/path.join only honor backslashes on win32"
+          : false,
+    },
+    async () => {
     const candidatePath = "C:\\Users\\Tester\\AppData\\Roaming\\npm\\claude.cmd";
     const candidateDir = path.dirname(candidatePath);
     const siblingPackageJson = path.join(candidateDir, "node_modules", "@anthropic-ai", "claude-code", "package.json");
@@ -442,7 +482,15 @@ describe("Claude version detection helpers", () => {
     });
   });
 
-  it("getClaudeVersionAsync uses async metadata fallback when exec probes fail", async () => {
+  it(
+    "getClaudeVersionAsync uses async metadata fallback when exec probes fail",
+    {
+      skip:
+        process.platform !== "win32"
+          ? "hardcoded Windows path literals; path.dirname/path.join only honor backslashes on win32"
+          : false,
+    },
+    async () => {
     const candidatePath = "C:\\Users\\Tester\\AppData\\Roaming\\npm\\claude.cmd";
     const packageJsonPath = path.join(path.dirname(candidatePath), "node_modules", "@anthropic-ai", "claude-code", "package.json");
 
@@ -475,7 +523,15 @@ describe("Claude version detection helpers", () => {
     });
   });
 
-  it("getClaudeVersionAsync does not call sync filesystem probes", async () => {
+  it(
+    "getClaudeVersionAsync does not call sync filesystem probes",
+    {
+      skip:
+        process.platform !== "win32"
+          ? "hardcoded Windows path literals; path.dirname/path.join only honor backslashes on win32"
+          : false,
+    },
+    async () => {
     const npmDir = "C:\\Users\\Tester\\AppData\\Roaming\\npm";
     const candidatePath = path.join(npmDir, "claude.cmd");
     const packageJsonPath = path.join(npmDir, "node_modules", "@anthropic-ai", "claude-code", "package.json");
@@ -906,7 +962,15 @@ describe("Hook installer version compatibility", () => {
     });
   });
 
-  it("falls back to npm shim sibling package.json on Windows when exec fails", () => {
+  it(
+    "falls back to npm shim sibling package.json on Windows when exec fails",
+    {
+      skip:
+        process.platform !== "win32"
+          ? "intentionally a Windows-only test (subtest name says so); also relies on backslash path literals"
+          : false,
+    },
+    () => {
     const shimDir = "C:\\Users\\Tester\\AppData\\Roaming\\npm";
     const shimPath = path.join(shimDir, "claude.cmd");
     const packageJsonPath = path.join(shimDir, "node_modules", "@anthropic-ai", "claude-code", "package.json");

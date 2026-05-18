@@ -367,7 +367,15 @@ fi
     );
   });
 
-  it("getKiroCliCandidates returns Windows install paths on win32", () => {
+  it(
+    "getKiroCliCandidates returns Windows install paths on win32",
+    {
+      skip:
+        process.platform !== "win32"
+          ? "asserts hardcoded Windows install path literals (LOCALAPPDATA, ProgramFiles); the linux half-assertion stays covered by other suites"
+          : false,
+    },
+    () => {
     const { __test } = require("../hooks/kiro-install");
     const { getKiroCliCandidates } = __test;
 
