@@ -217,7 +217,7 @@ function generateHtmlWizard(result) {
 
     <div class="header">
         <h1>🦊 Clawd - Gongfeng Copilot 配置向导</h1>
-        <p>帮助您手动配置 CodeBuddy 内网版插件的 11 个事件钩子</p>
+<p>帮助您手动配置 Gongfeng Copilot (CodeBuddy VSCode plugin) 的 11 个事件钩子</p>
 
         <div class="status ${result.status === 'ready' ? 'ready' : 'not-installed'}">
             <strong>检测状态:</strong>
@@ -308,7 +308,7 @@ function main() {
 
     if (result.status === 'plugin_not_installed') {
       console.log('❌ Gongfeng Copilot 插件未安装');
-      console.log('请先安装 CodeBuddy 内网版 VSCode 插件');
+    console.log('请先安装 Gongfeng Copilot (CodeBuddy VSCode plugin)');
       return;
     }
 

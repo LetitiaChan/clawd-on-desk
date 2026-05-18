@@ -126,7 +126,7 @@ function generateUninstallHtml(result) {
   <div class="step">
     <h2>📋 操作步骤</h2>
     <ol>
-      <li>打开 VSCode → CodeBuddy 内网版插件 → <strong>Hooks 管理</strong></li>
+<li>打开 VSCode → Gongfeng Copilot (CodeBuddy VSCode plugin) → <strong>Hooks 管理</strong></li>
       <li>对照下方列表，找到每条 <code>Clawd: *</code> 钩子，点击 <strong>删除</strong></li>
       <li>每删完一条，回到本页点对应卡片的「已在 UI 中删除」按钮记录进度</li>
       <li>全部删除后，可再次运行 <code>node hooks/uninstall.js gongfeng-copilot</code> 复检</li>

@@ -1,11 +1,11 @@
-// gongfeng-copilot — CodeBuddy 内网版 VSCode 插件 (publisher: gongfeng, name: gongfeng-copilot)
+// gongfeng-copilot — Gongfeng Copilot (CodeBuddy VSCode plugin) (publisher: gongfeng, name: gongfeng-copilot)
 // Hook-based integration via ~/.gongfeng-copilot/hooks/hooks.json
 // Hook payload schema differs from CodeBuddy CLI/IDE — flat camelCase events, .sh stub file required.
 // Plugin lives inside Code.exe — process identification piggybacks on the shared editor map.
 
 module.exports = {
   id: "gongfeng-copilot",
-  name: "CodeBuddy (VSCode 内网版)",
+  name: "Gongfeng Copilot (CodeBuddy VSCode plugin)",
   // The plugin runs inside VSCode (Code.exe). We do not register a separate
   // process name here — Code.exe is already in the shared terminal list,
   // and the hook payload carries agent_id="gongfeng-copilot" for routing.

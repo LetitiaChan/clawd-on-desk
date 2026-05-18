@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Clawd — gongfeng-copilot (CodeBuddy 内网版 VSCode 插件) hook handler.
+// Clawd — Gongfeng Copilot (CodeBuddy VSCode plugin) hook handler.
 // Invoked indirectly via per-event .sh stubs in ~/.gongfeng-copilot/hooks/clawd/.
 // Each stub passes the event name as argv[2] and pipes stdin JSON through.
 //
@@ -51,7 +51,9 @@ const resolve = createPidResolver({
 });
 
 function stdoutForEvent(hookName) {
-  if (GATING_EVENTS.has(hookName)) return "{}";
+  // Gating events ({}) keep plugin's default policy; non-gating events also
+  // return {} to satisfy the plugin's stdout contract without interfering.
+  void hookName;
   return "{}";
 }
 
@@ -88,7 +90,6 @@ readStdinJson().then((payload) => {
   }
 
   const { state, event } = mapped;
-  if (hookName === "beforeSubmitPrompt" && !process.env.CLAWD_REMOTE) resolve();
 
   const sessionId = pickSessionId(payload);
   const cwd = pickCwd(payload);

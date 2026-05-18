@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Generate shell script snippets for manual hook setup in gongfeng-copilot plugin.
 //
-// The CodeBuddy 内网版 VSCode 插件 (publisher: gongfeng, name: gongfeng-copilot)
+// The Gongfeng Copilot (CodeBuddy VSCode plugin) (publisher: gongfeng, name: gongfeng-copilot)
 // uses a cloud-synced hooks.json that cannot be modified locally (cloud overrides).
 // Instead, we generate shell script snippets that users can manually paste into
 // the plugin's UI to create persistent hooks.
@@ -19,7 +19,7 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const { resolveNodeBin } = require("./server-config");
-const { writeJsonAtomic, asarUnpackedPath, extractExistingNodeBin } = require("./json-utils");
+const { asarUnpackedPath } = require("./json-utils");
 
 const MARKER = "gongfeng-copilot-hook.js";
 const DISPLAY_NAME_PREFIX = "Clawd: ";

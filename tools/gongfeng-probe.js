@@ -215,7 +215,7 @@ function cmdInstall() {
   console.log(`  保留的用户 hook: ${kept}`);
   console.log("");
   console.log("下一步：");
-  console.log("  1. 在 VSCode 里打开 CodeBuddy(内网版)，发起一次对话；");
+  console.log("  1. 在 VSCode 里打开 Gongfeng Copilot (CodeBuddy VSCode plugin)，发起一次对话；");
   console.log("     尝试触发 shell 命令、MCP、文件读写、停止等多种动作。");
   console.log("  2. 跑   node tools/gongfeng-probe.js report   查看采集到的 payload。");
   console.log("  3. 完事后跑   node tools/gongfeng-probe.js uninstall   恢复。");
