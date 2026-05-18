@@ -246,8 +246,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   <h2>📋 配置步骤</h2>
   <ol>
     <li><strong>Windows 用户必做:</strong> 在 CodeBuddy 插件 → Hooks 管理 → 高级设置中，设置命令执行器路径为: <code>C:\\Program Files\\Git\\bin\\bash.exe</code></li>
-    <li><strong>逐个创建钩子:</strong> 为下面每个事件创建钩子，复制对应的 shell 脚本</li>
-    <li><strong>验证配置:</strong> 完成后重启 VSCode 测试钩子是否生效</li>
+    <li><strong>逐个创建钩子:</strong> 为下面每个事件创建钩子，复制对应的 shell 脚本。具体操作：在 <strong>CodeBuddy 插件 → Hooks</strong> 页，点击按钮 <strong>「管理 Hooks」</strong>，在打开的网站中点击 <strong>「新建 Hooks」</strong> 逐个创建钩子；全部创建完成后，回到 <strong>插件 Hooks 页</strong>点击 <strong>刷新</strong> 即可看到新建的钩子。</li>
+    <li><strong>对话验证宠物:</strong> 配置完成后，<strong>重启 VSCode</strong>，打开 CodeBuddy 对话窗口，随便发一句话（例如「你好」）让 AI 回复。观察桌面右下角的 Clawd 桌宠：
+      <ul>
+        <li>发送消息后，桌宠应进入 <strong>「思考中」</strong>（thinking）状态</li>
+        <li>AI 开始输出回复时，桌宠应切换到 <strong>「响应中」</strong>（responding / 打字）状态</li>
+        <li>AI 回复结束后，桌宠应回到 <strong>「空闲」</strong>（idle）状态</li>
+      </ul>
+      若桌宠状态完全不变，说明钩子未触发——请检查上面的"已配置 X/11"计数、Windows 用户确认 bash.exe 路径，或在 Clawd 设置 → 日志中查看是否收到 hook 事件。
+    </li>
   </ol>
   <div class="action-buttons">
     <button class="btn btn-secondary" onclick="copyAllSnippets()">复制全部脚本</button>
