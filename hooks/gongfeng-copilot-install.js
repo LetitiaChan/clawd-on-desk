@@ -337,6 +337,132 @@ function _renderBashSection(detection) {
   return { banner, stepBlock };
 }
 
+/**
+ * Detect whether Node.js is actually available on the system.
+ * On Windows, `resolveNodeBin()` always returns "node" so we additionally
+ * verify via `where node`. On macOS/Linux, null means not found.
+ *
+ * @param {object} [options]
+ * @param {string} [options.platform]
+ * @returns {{ available: boolean, nodePath: string|null }}
+ */
+function _detectNodeAvailability(options = {}) {
+  const platform = options.platform || process.platform;
+  try {
+    const nodeBin = resolveNodeBin({ platform });
+    if (platform === "win32") {
+      // resolveNodeBin always returns "node" on Windows — verify PATH
+      try {
+        const { execFileSync } = require("child_process");
+        const output = execFileSync("where", ["node"], {
+          encoding: "utf8",
+          timeout: 5000,
+          windowsHide: true,
+        });
+        const firstLine = String(output || "").split(/\r?\n/).find((l) => l.trim());
+        if (firstLine && firstLine.trim()) {
+          return { available: true, nodePath: firstLine.trim() };
+        }
+      } catch (_e) { /* where node failed */ }
+      return { available: false, nodePath: null };
+    }
+    // macOS/Linux
+    if (nodeBin) return { available: true, nodePath: nodeBin };
+    return { available: false, nodePath: null };
+  } catch (_e) {
+    return { available: false, nodePath: null };
+  }
+}
+
+/**
+ * Build the Node.js install guidance step (only rendered when Node is missing).
+ *
+ * @param {{ available: boolean, nodePath: string|null }} nodeStatus
+ * @param {string} platform
+ * @returns {{ nodeBanner: string, nodeStep: string }}
+ */
+function _renderNodeSection(nodeStatus, platform) {
+  if (nodeStatus.available) {
+    return { nodeBanner: "", nodeStep: "" };
+  }
+
+  const nodeBanner = `
+<div class="windows-banner">
+  <h3>⚠️ 未检测到 Node.js — 钩子无法运行</h3>
+  <p>Clawd 的所有 agent 钩子脚本由 <code>node</code> 进程执行。没有 Node.js，钩子将报错 <code>ENOENT</code>，桌宠无法感知 AI agent 的工作状态。</p>
+  <p>请到下方 <a href="#step-node">「⓪ 安装 Node.js」</a> 步骤跟着指引安装，安装完成后重启终端 / VSCode 再回来继续。</p>
+</div>`;
+
+  let installGuide;
+  if (platform === "win32") {
+    installGuide = `
+  <p><strong>方案 A · 推荐：用 winget 一键安装</strong>（Win10/11 自带 winget）。复制下面这条命令到 <strong>PowerShell</strong> 里运行：</p>
+  <div class="cmd-block">
+    <code id="node-winget-cmd">winget install --id OpenJS.NodeJS.LTS -e --source winget --accept-source-agreements --accept-package-agreements</code>
+    <button class="copy-btn block" onclick="copyText('node-winget-cmd', this)">📋 复制命令</button>
+  </div>
+  <p>装完后<strong>关闭并重新打开 PowerShell / 终端</strong>，运行 <code>node --version</code> 确认输出版本号。</p>
+  <details>
+    <summary>方案 B · 手动下载安装包</summary>
+    <ol>
+      <li>访问 <a href="https://nodejs.org/" target="_blank" rel="noopener">https://nodejs.org/</a></li>
+      <li>下载 LTS 版本的 Windows 安装包（.msi）</li>
+      <li>运行安装包，一路下一步即可（确保勾选"Add to PATH"）</li>
+    </ol>
+  </details>
+  <details>
+    <summary>方案 C · 用版本管理器安装</summary>
+    <ul>
+      <li><a href="https://github.com/nvm-sh/nvm#installing-and-updating" target="_blank" rel="noopener">nvm-windows</a>：<code>nvm install lts</code> + <code>nvm use lts</code></li>
+      <li><a href="https://volta.sh/" target="_blank" rel="noopener">Volta</a>：<code>volta install node</code></li>
+      <li>Scoop：<code>scoop install nodejs-lts</code></li>
+      <li>Chocolatey：<code>choco install nodejs-lts</code></li>
+    </ul>
+  </details>`;
+  } else if (platform === "darwin") {
+    installGuide = `
+  <p><strong>方案 A · 推荐：用 Homebrew 安装</strong></p>
+  <div class="cmd-block">
+    <code id="node-brew-cmd">brew install node@20</code>
+    <button class="copy-btn block" onclick="copyText('node-brew-cmd', this)">📋 复制命令</button>
+  </div>
+  <p>没装 Homebrew？先按 <a href="https://brew.sh/" target="_blank" rel="noopener">brew.sh</a> 装好再跑上面那条。</p>
+  <details>
+    <summary>方案 B · 其它安装方式</summary>
+    <ul>
+      <li>官网下载：<a href="https://nodejs.org/" target="_blank" rel="noopener">https://nodejs.org/</a> → macOS Installer (.pkg)</li>
+      <li><a href="https://github.com/nvm-sh/nvm#installing-and-updating" target="_blank" rel="noopener">nvm</a>：<code>nvm install --lts</code></li>
+      <li><a href="https://volta.sh/" target="_blank" rel="noopener">Volta</a>：<code>volta install node</code></li>
+    </ul>
+  </details>`;
+  } else {
+    installGuide = `
+  <p>用你的发行版包管理器安装 Node.js LTS：</p>
+  <ul>
+    <li>Debian/Ubuntu：<code>sudo apt install nodejs npm</code>（或用 <a href="https://github.com/nodesource/distributions" target="_blank" rel="noopener">NodeSource</a> 获取最新版）</li>
+    <li>RHEL/CentOS/Fedora：<code>sudo dnf install nodejs</code></li>
+    <li>Arch：<code>sudo pacman -S nodejs npm</code></li>
+  </ul>
+  <details>
+    <summary>用版本管理器安装</summary>
+    <ul>
+      <li><a href="https://github.com/nvm-sh/nvm#installing-and-updating" target="_blank" rel="noopener">nvm</a>：<code>nvm install --lts</code></li>
+      <li><a href="https://volta.sh/" target="_blank" rel="noopener">Volta</a>：<code>volta install node</code></li>
+    </ul>
+  </details>`;
+  }
+
+  const nodeStep = `
+<div class="step download" id="step-node">
+  <h2>⓪ 📥 安装 Node.js</h2>
+  <p>本机当前未检测到 <code>node</code> 命令。Clawd 的钩子脚本需要 Node.js 18+ 才能运行，请先按下面的指引安装。</p>
+  ${installGuide}
+  <p style="margin-top:12px;color:#555;font-size:13px;">安装完成后，<strong>重启终端 / VSCode</strong>，然后在终端运行 <code>node --version</code> 确认输出 <code>v18.x</code> 或更高版本。确认后再继续下面的步骤。</p>
+</div>`;
+
+  return { nodeBanner, nodeStep };
+}
+
 function generateHtmlWizard(result, detection) {
   // Lazy-resolve detection so callers (CLI / Settings / tests) don't have
   // to know about the detector module. Tests can pass an explicit
@@ -406,6 +532,8 @@ function generateHtmlWizard(result, detection) {
     : [];
 
   const { banner: bashBanner, stepBlock: bashStep } = _renderBashSection(detection);
+  const nodeStatus = _detectNodeAvailability({ platform: detection.platform || process.platform });
+  const { nodeBanner, nodeStep } = _renderNodeSection(nodeStatus, detection.platform || process.platform);
   const recommendedPath = (detection.found && detection.found[0] && detection.found[0].path) || null;
   const stepOneInstruction = recommendedPath
     ? `<strong>设置命令执行器路径:</strong> 在 CodeBuddy 插件 → Hooks 管理 → 高级设置中，把命令执行器路径设为下面这条<strong>本机实际路径</strong>: <code>${_escHtml(recommendedPath)}</code>（已自动检测；其它候选见下方「① Bash 路径」步骤）`
@@ -459,6 +587,7 @@ details summary { cursor: pointer; color: #5b8def; }
 </style>
 </head>
 <body>
+${nodeBanner}
 ${bashBanner}
 
 <div class="header">
@@ -470,12 +599,13 @@ ${bashBanner}
   </div>
   ${ready ? `<div class="progress" style="width: ${(found / 11) * 100}%"></div>` : ''}
   <div class="meta-info">
-    Node: ${result.node_bin || '(default)'}<br>
+    Node: ${nodeStatus.available ? _escHtml(nodeStatus.nodePath || result.node_bin || '(default)') + ' ✅' : '⚠️ 未检测到 — 请先按下方步骤安装'}<br>
     Hook: ${result.hook_script || '(default)'}<br>
     Bash: ${recommendedPath ? _escHtml(recommendedPath) + ' ✨' : '(未检测到 — 请先按下方步骤安装)'}
   </div>
 </div>
 
+${nodeStep}
 ${bashStep}
 
 <div class="step">
@@ -579,6 +709,8 @@ module.exports = {
   prepareGongfengCopilotSnippets,
   checkExistingClawdHooks,
   generateHtmlWizard,
+  _detectNodeAvailability,
+  _renderNodeSection,
 };
 
 if (require.main === module) {

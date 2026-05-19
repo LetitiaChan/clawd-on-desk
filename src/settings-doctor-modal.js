@@ -419,9 +419,11 @@
     const installLink = isWarning
       ? ` <a href="#" class="doctor-node-install-link" data-action="open-external" data-url="https://nodejs.org">nodejs.org</a>`
       : "";
+    const installGuide = isWarning ? renderNodeInstallGuide(core) : "";
     const detailHtml = isWarning
       ? `<div class="doctor-check-detail">${escape(core, t(core, "doctorNodeMissing"))}${installLink}</div>` +
-        (hint ? `<div class="doctor-check-detail doctor-check-hint">${escape(core, hint)}</div>` : "")
+        (hint ? `<div class="doctor-check-detail doctor-check-hint">${escape(core, hint)}</div>` : "") +
+        installGuide
       : (detail ? `<div class="doctor-check-detail">${escape(core, detail)}</div>` : "");
     return (
       `<div class="doctor-check-row doctor-check-row-compact ${cls}">` +
@@ -432,6 +434,22 @@
           `<span class="doctor-check-status">${escape(core, checkStatusLabel(core, check))}</span>` +
         `</div>` +
         detailHtml +
+      `</div>`
+    );
+  }
+
+  function renderNodeInstallGuide(core) {
+    return (
+      `<div class="doctor-node-install-guide">` +
+        `<div class="doctor-check-detail doctor-node-install-methods">` +
+          `<span class="doctor-node-install-title">${escape(core, t(core, "doctorNodeInstallTitle"))}</span>` +
+          `<ul class="doctor-node-install-list">` +
+            `<li><strong>Windows:</strong> <code>winget install OpenJS.NodeJS.LTS</code></li>` +
+            `<li><strong>macOS:</strong> <code>brew install node@20</code></li>` +
+            `<li><strong>Linux:</strong> <code>sudo apt install nodejs</code> / <code>sudo dnf install nodejs</code></li>` +
+            `<li><a href="#" class="doctor-node-install-link" data-action="open-external" data-url="https://nodejs.org">${escape(core, t(core, "doctorNodeInstallDownload"))}</a></li>` +
+          `</ul>` +
+        `</div>` +
       `</div>`
     );
   }
