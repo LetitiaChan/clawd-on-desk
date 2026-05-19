@@ -1,6 +1,7 @@
 "use strict";
 
 const { checkLocalServer } = require("./doctor-detectors/local-server");
+const { checkNodeAvailability } = require("./doctor-detectors/node-availability");
 const { checkAgentIntegrations } = require("./doctor-detectors/agent-integrations");
 const { checkPermissionBubblePolicy } = require("./doctor-detectors/permission-bubble-policy");
 const { checkThemeHealth } = require("./doctor-detectors/theme-health");
@@ -25,6 +26,11 @@ function runDoctorChecks(options = {}) {
   const prefs = options.prefs || {};
   const checks = [
     (options.checkLocalServer || checkLocalServer)(options.server),
+    (options.checkNodeAvailability || checkNodeAvailability)({
+      platform: options.platform,
+      resolveNodeBin: options.resolveNodeBin,
+      execFileSync: options.execFileSync,
+    }),
     (options.checkAgentIntegrations || checkAgentIntegrations)({
       prefs,
       fs: options.fs,

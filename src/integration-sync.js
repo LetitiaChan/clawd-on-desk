@@ -8,6 +8,9 @@ function createIntegrationSyncRuntime(options = {}) {
   const startClaudeSettingsWatcher = options.startClaudeSettingsWatcher;
   const stopClaudeSettingsWatcher = options.stopClaudeSettingsWatcher;
 
+  // Node detection state — set once at startup sync time
+  let _nodeDetectionResult = null;
+
   function syncClawdHooks() {
     try {
       if (typeof ctx.syncClawdHooksImpl === "function") {
@@ -337,7 +340,29 @@ function createIntegrationSyncRuntime(options = {}) {
     return stopClaudeSettingsWatcher();
   }
 
+  function probeNodeAvailability() {
+    try {
+      const { resolveNodeBin } = require("../hooks/server-config");
+      const nodeBin = resolveNodeBin();
+      if (!nodeBin) {
+        console.warn("Clawd: Node.js not detected — hooks may not work. Install Node from https://nodejs.org");
+        _nodeDetectionResult = { ok: false, nodeBin: null };
+      } else {
+        _nodeDetectionResult = { ok: true, nodeBin };
+      }
+    } catch (err) {
+      console.warn("Clawd: Node.js detection failed:", err.message);
+      _nodeDetectionResult = { ok: false, nodeBin: null, error: err.message };
+    }
+    return _nodeDetectionResult;
+  }
+
+  function getNodeDetectionStatus() {
+    return _nodeDetectionResult;
+  }
+
   function syncEnabledStartupIntegrations() {
+    probeNodeAvailability();
     if (shouldManageClaudeHooks() && isAgentEnabled("claude-code")) {
       syncClawdHooks();
       startClaudeSettingsWatcher();
@@ -366,6 +391,7 @@ function createIntegrationSyncRuntime(options = {}) {
     repairIntegrationForAgent,
     stopIntegrationForAgent,
     syncEnabledStartupIntegrations,
+    getNodeDetectionStatus,
   };
 }
 

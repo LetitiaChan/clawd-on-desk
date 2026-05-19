@@ -145,6 +145,7 @@ const {
   repairIntegrationForAgent,
   stopIntegrationForAgent,
   syncEnabledStartupIntegrations,
+  getNodeDetectionStatus,
 } = integrationSync;
 
 function repairRuntimeStatus() {
@@ -249,6 +250,7 @@ function cleanup() {
 return {
   startHttpServer,
   getHookServerPort,
+  getNodeDetectionStatus,
   getRuntimeStatus,
   getRecentHookEvents,
   clearRecentHookEvents,

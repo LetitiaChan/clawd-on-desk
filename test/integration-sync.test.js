@@ -154,4 +154,20 @@ describe("integration sync runtime", () => {
       console.log = originalLog;
     }
   });
+
+  it("getNodeDetectionStatus returns null before syncEnabledStartupIntegrations", () => {
+    const { runtime } = makeRuntime();
+    assert.strictEqual(runtime.getNodeDetectionStatus(), null);
+  });
+
+  it("syncEnabledStartupIntegrations probes node and exposes detection status", () => {
+    const { runtime } = makeRuntime();
+    runtime.syncEnabledStartupIntegrations();
+    const status = runtime.getNodeDetectionStatus();
+    assert.ok(status, "should have a detection result after startup sync");
+    assert.strictEqual(typeof status.ok, "boolean");
+    // In the test environment, Node IS available (we're running in Node)
+    assert.strictEqual(status.ok, true);
+    assert.ok(status.nodeBin, "should have a nodeBin path");
+  });
 });

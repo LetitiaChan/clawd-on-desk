@@ -129,6 +129,7 @@
   function checkLabel(core, check) {
     const map = {
       "local-server": "doctorCheckLocalServer",
+      "node-availability": "doctorCheckNodeAvailability",
       "agent-integrations": "doctorCheckAgentIntegrations",
       "permission-bubble-policy": "doctorCheckPermissionBubbles",
       "theme-health": "doctorCheckTheme",
@@ -410,6 +411,31 @@
     }</div>`;
   }
 
+  function renderNodeAvailabilityCheck(core, check, cls) {
+    const detail = String(check.detail || "");
+    const isWarning = cls !== "pass";
+    const hintKey = check.textHint || "doctorNodeMissingHint";
+    const hint = isWarning ? t(core, hintKey) : "";
+    const installLink = isWarning
+      ? ` <a href="#" class="doctor-node-install-link" data-action="open-external" data-url="https://nodejs.org">nodejs.org</a>`
+      : "";
+    const detailHtml = isWarning
+      ? `<div class="doctor-check-detail">${escape(core, t(core, "doctorNodeMissing"))}${installLink}</div>` +
+        (hint ? `<div class="doctor-check-detail doctor-check-hint">${escape(core, hint)}</div>` : "")
+      : (detail ? `<div class="doctor-check-detail">${escape(core, detail)}</div>` : "");
+    return (
+      `<div class="doctor-check-row doctor-check-row-compact ${cls}">` +
+        `<div class="doctor-check-main">` +
+          `<span class="doctor-check-dot"></span>` +
+          `<span class="doctor-check-label">${escape(core, checkLabel(core, check))}</span>` +
+          `<span class="doctor-check-summary" title="${escape(core, detail)}">${escape(core, detail)}</span>` +
+          `<span class="doctor-check-status">${escape(core, checkStatusLabel(core, check))}</span>` +
+        `</div>` +
+        detailHtml +
+      `</div>`
+    );
+  }
+
   function renderLocalServerCheck(core, check, cls) {
     const fixButton = renderFixButton(core, check.fixAction);
     const repairFeedback = renderRepairFeedback(core, check.fixAction);
@@ -462,6 +488,7 @@
     return checks.map((check) => {
       const cls = check.level === "critical" ? "critical" : (check.level === "warning" ? "warning" : "pass");
       if (check.id === "local-server") return renderLocalServerCheck(core, check, cls);
+      if (check.id === "node-availability") return renderNodeAvailabilityCheck(core, check, cls);
       if (check.id === "agent-integrations") return renderAgentIntegrationCheck(core, check, cls);
       const fixButton = renderFixButton(core, check.fixAction);
       const repairFeedback = renderRepairFeedback(core, check.fixAction);
@@ -483,6 +510,7 @@
   function renderCheckSkeleton(core) {
     const labels = [
       t(core, "doctorCheckLocalServer"),
+      t(core, "doctorCheckNodeAvailability"),
       t(core, "doctorCheckAgentIntegrations"),
       t(core, "doctorCheckPermissionBubbles"),
       t(core, "doctorCheckTheme"),

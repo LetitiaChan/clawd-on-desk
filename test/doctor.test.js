@@ -34,10 +34,11 @@ describe("doctor aggregate checks", () => {
     );
   });
 
-  it("runs all four Step 1 checks through injectable dependencies", () => {
+  it("runs all five Step 1 checks through injectable dependencies", () => {
     const result = runDoctorChecks({
       prefs: { theme: "clawd" },
       checkLocalServer: () => ({ id: "local-server", status: "pass", level: null }),
+      checkNodeAvailability: () => ({ id: "node-availability", status: "pass", level: null }),
       checkAgentIntegrations: () => ({ id: "agent-integrations", status: "pass", level: null, details: [] }),
       checkPermissionBubblePolicy: () => ({ id: "permission-bubble-policy", status: "pass", level: null }),
       checkThemeHealth: () => ({ id: "theme-health", status: "pass", level: null }),
@@ -46,6 +47,7 @@ describe("doctor aggregate checks", () => {
     assert.strictEqual(result.overall.status, "pass");
     assert.deepStrictEqual(result.checks.map((check) => check.id), [
       "local-server",
+      "node-availability",
       "agent-integrations",
       "permission-bubble-policy",
       "theme-health",
