@@ -20,7 +20,10 @@ module.exports = {
   eventMap: {
     beforeSubmitPrompt:        "thinking",
     afterAgentThought:         "thinking",
-    afterAgentResponse:        "idle",
+    // afterAgentResponse 触发于"模型一次回答输出之后"，此时整轮对话尚未结束（stop 还没到）。
+    // 之前映射为 idle 会让桌宠在"纯文本输出"阶段被打回空闲，看起来像没反应；改为 thinking
+    // 与 hooks/gongfeng-copilot-hook.js 的 HOOK_TO_STATE 保持一致。
+    afterAgentResponse:        "thinking",
     beforeShellExecution:      "working",
     afterShellExecution:       "working",
     beforeMCPExecution:        "working",

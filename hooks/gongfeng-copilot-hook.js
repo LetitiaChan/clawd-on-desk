@@ -112,8 +112,35 @@ readStdinJson().then((payload) => {
   }
 
   const outLine = stdoutForEvent(hookName);
-  postStateToRunningServer(JSON.stringify(body), { timeoutMs: 100 }, () => {
+  postStateToRunningServer(JSON.stringify(body), { timeoutMs: 100 }, (ok) => {
+    if (!ok && process.env.CLAWD_HOOK_DEBUG) {
+      // 静默失败排查辅助：只在用户显式开启 CLAWD_HOOK_DEBUG=1 时才输出，
+      // 避免污染插件 UI 上的 stderr 面板。常见场景：Clawd 主进程未运行 / 端口 23333-23337
+      // 全部被占用 / 100ms 超时下主进程过载。
+      process.stderr.write(`[clawd-gongfeng] state post failed: event=${hookName}\n`);
+    }
     process.stdout.write(outLine + "\n");
     process.exit(0);
   });
+}).catch((err) => {
+  // stdin 读取异常（管道关闭 / 解析失败 / 上层逻辑抛错）。打印一个空 JSON 让插件继续，
+  // 避免 hook 进程挂起导致僵尸。CLAWD_HOOK_DEBUG=1 时输出诊断信息便于排查。
+  if (process.env.CLAWD_HOOK_DEBUG) {
+    process.stderr.write(`[clawd-gongfeng] stdin read failed: ${err && err.message}\n`);
+  }
+  process.stdout.write("{}\n");
+  process.exit(0);
 });
+
+// 兜底超时：极端情况下（stdin 管道既不 end 也不 error），上面 readStdinJson 的
+// Promise 可能永远不 settle。给 hook 进程一个硬性墙钟上限——5 秒后无论如何都退出，
+// 避免插件累积僵尸子进程。Hook 自身不应该跑超过几百毫秒。
+const HOOK_HARD_TIMEOUT_MS = 5000;
+const hardTimer = setTimeout(() => {
+  if (process.env.CLAWD_HOOK_DEBUG) {
+    process.stderr.write(`[clawd-gongfeng] hard timeout (${HOOK_HARD_TIMEOUT_MS}ms) — forcing exit\n`);
+  }
+  try { process.stdout.write("{}\n"); } catch {}
+  process.exit(0);
+}, HOOK_HARD_TIMEOUT_MS);
+hardTimer.unref();

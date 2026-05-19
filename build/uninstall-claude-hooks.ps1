@@ -17,6 +17,7 @@ $ClawdCommandMarkers = @(
   "copilot-hook.js",
   "codex-hook.js",
   "codex-debug-hook.js",
+  "gongfeng-copilot-hook.js",
   "openclaw-plugin",
   "opencode-plugin",
   "hermes-plugin"
@@ -477,6 +478,21 @@ try {
   # --- Pi Extension ---
   $piConfigPath = Join-Path (Join-Path $userHome ".pi") "extensions.json"
   Process-JsonSettingsFile -FilePath $piConfigPath -AgentName "Pi" -IsPluginArray
+
+  # --- Gongfeng Copilot (CodeBuddy VSCode plugin) ---
+  # Plugin's hooks.json is cloud-synced, so we cannot remove the hook entries
+  # directly from there. But we DO own the local .sh stubs Clawd may have
+  # dropped under ~/.gongfeng-copilot/hooks/clawd/, plus the host-prefix marker.
+  # Removing those leaves the cloud-side hook entries pointing to a missing
+  # file, which the plugin handles gracefully (silent skip).
+  $gongfengClawdDir = Join-Path (Join-Path $userHome ".gongfeng-copilot") "hooks"
+  $gongfengClawdDir = Join-Path $gongfengClawdDir "clawd"
+  if ([System.IO.Directory]::Exists($gongfengClawdDir)) {
+    try {
+      [System.IO.Directory]::Delete($gongfengClawdDir, $true)
+    } catch {
+    }
+  }
 
   exit 0
 } catch {

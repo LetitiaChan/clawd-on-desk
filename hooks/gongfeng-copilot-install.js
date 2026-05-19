@@ -66,37 +66,57 @@ function buildShellSnippet(nodeBin, hookScript, eventName) {
 
 /**
  * Check if user has already configured Clawd hooks via plugin UI.
- * Scans hooks-cache.json for entries with display_name starting with "Clawd: ".
+ *
+ * Reading strategy:
+ *   1. Prefer `hooks.json` (the plugin's source-of-truth file synced from cloud).
+ *   2. Fall back to `hooks-cache.json` (local cache of cloud state) when
+ *      hooks.json is missing — this happens on a fresh install before the
+ *      plugin has serialized cloud config locally.
+ *
+ * The cache can lag behind the cloud (e.g. user removed hooks on another
+ * machine), so reading the source-of-truth file first gives more accurate
+ * "已配置 X/11" counters in the wizard UI.
+ *
+ * Returns { found, events: [{ event, display_name, hook_id }], source }.
  */
 function checkExistingClawdHooks() {
+  const hooksJsonPath = path.join(DEFAULT_PARENT_DIR, "hooks", "hooks.json");
   const cachePath = path.join(DEFAULT_PARENT_DIR, "hooks", "hooks-cache.json");
-  if (!fs.existsSync(cachePath)) return { found: 0, events: [] };
-  
-  try {
-    const cache = JSON.parse(fs.readFileSync(cachePath, "utf-8"));
-    const clawdEvents = [];
-    let found = 0;
-    
-    const hooksObj = cache.hooks || {};
-    for (const [eventName, hooks] of Object.entries(hooksObj)) {
-      if (Array.isArray(hooks)) {
+
+  const tryParse = (filePath, source) => {
+    if (!fs.existsSync(filePath)) return null;
+    try {
+      const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+      const clawdEvents = [];
+      let found = 0;
+      const hooksObj = (data && data.hooks) || {};
+      for (const [eventName, hooks] of Object.entries(hooksObj)) {
+        if (!Array.isArray(hooks)) continue;
         for (const hook of hooks) {
-          if (hook && typeof hook === 'object' && hook.display_name && hook.display_name.startsWith(DISPLAY_NAME_PREFIX)) {
+          if (hook && typeof hook === "object" && typeof hook.display_name === "string"
+              && hook.display_name.startsWith(DISPLAY_NAME_PREFIX)) {
             found++;
             clawdEvents.push({
               event: eventName,
               display_name: hook.display_name,
-              hook_id: hook.hook_id
+              hook_id: hook.hook_id,
             });
           }
         }
       }
+      return { found, events: clawdEvents, source };
+    } catch (err) {
+      return { found: 0, events: [], error: err.message, source };
     }
-    
-    return { found, events: clawdEvents };
-  } catch (err) {
-    return { found: 0, events: [], error: err.message };
-  }
+  };
+
+  const fromHooksJson = tryParse(hooksJsonPath, "hooks.json");
+  if (fromHooksJson) return fromHooksJson;
+
+  const fromCache = tryParse(cachePath, "hooks-cache.json");
+  if (fromCache) return fromCache;
+
+  return { found: 0, events: [], source: "none" };
 }
 
 /**

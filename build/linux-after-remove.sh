@@ -10,7 +10,7 @@ set -e
 trap 'exit 0' ERR
 
 # Markers used to identify Clawd-owned hooks
-CLAWD_MARKERS=("clawd-hook.js" "codebuddy-hook.js" "gemini-hook.js" "cursor-hook.js" "kiro-hook.js" "kimi-hook.js" "copilot-hook.js" "codex-hook.js" "auto-start.js" "auto-start.sh" "opencode-plugin" "openclaw-plugin" "hermes-plugin")
+CLAWD_MARKERS=("clawd-hook.js" "codebuddy-hook.js" "gemini-hook.js" "cursor-hook.js" "kiro-hook.js" "kimi-hook.js" "copilot-hook.js" "codex-hook.js" "codex-debug-hook.js" "gongfeng-copilot-hook.js" "auto-start.js" "auto-start.sh" "opencode-plugin" "openclaw-plugin" "hermes-plugin")
 
 # Remove Clawd entries from a JSON settings file (hooks object with arrays)
 # Uses python3/python as a portable JSON processor (available on all deb systems)
@@ -293,6 +293,15 @@ process_user_home() {
 
   # Pi Extension: ~/.pi/settings.json (if applicable)
   remove_clawd_from_json_settings "$home/.pi/settings.json"
+
+  # Gongfeng Copilot (CodeBuddy VSCode plugin):
+  # Plugin's hooks.json is cloud-synced, so we can only clean up the local
+  # .sh stubs Clawd may have dropped under ~/.gongfeng-copilot/hooks/clawd/.
+  # Removing the directory leaves cloud-side hook entries pointing to a
+  # missing file, which the plugin handles gracefully (silent skip).
+  if [ -d "$home/.gongfeng-copilot/hooks/clawd" ]; then
+    rm -rf "$home/.gongfeng-copilot/hooks/clawd" 2>/dev/null || true
+  fi
 }
 
 # Deduplicate home directories and process each

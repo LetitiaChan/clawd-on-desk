@@ -1,5 +1,20 @@
 #!/usr/bin/env node
-// Clawd — Gongfeng Copilot 一站式配置向导
+// Clawd — Gongfeng Copilot 一站式配置向导（CLI 入口 + 公共 API）
+//
+// ⚠️ DEPRECATED CLI ENTRY
+//
+//   通过 `node hooks/gongfeng-bash-detector.js` 直接调用本脚本生成的 HTML 向导
+//   （见下方 `generateDetectorHtml`）是早期实现，与 Clawd 设置面板「生成向导」按钮
+//   触发的 `hooks/gongfeng-copilot-install.js#generateHtmlWizard` **样式/内容已不同步**。
+//
+//   推荐使用：Clawd → 设置 → Agents → Gongfeng Copilot → 「生成配置向导」按钮。
+//   两个入口产出的 HTML 不一致曾导致用户困惑，未来计划统一到 install 模块的实现，
+//   届时本 CLI 入口的 HTML 模板会被替换为薄壳调用。
+//
+//   ✅ 仍然受支持的导出 API（被 install 模块和测试调用）：
+//     - `detectBashPaths()` — 扫描候选 bash 路径
+//     - `buildSnippetsWithFallback()` — 生成 11 段 shell snippet
+//     - `prepareGongfengBashDetector()` — 组合上面两个并写 HTML
 //
 // Gongfeng Copilot (CodeBuddy VSCode plugin) 的 hook 是 .sh 脚本，需要：
 //   (A) 一个本机 bash 可执行文件（Windows 默认没有，要手动指定路径）

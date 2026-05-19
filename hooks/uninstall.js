@@ -24,7 +24,7 @@ function printHelp() {
     "Supported agents for all-agents:",
     "  Claude Code, CodeBuddy, Gemini CLI, Cursor Agent, Kiro CLI,",
     "  Kimi CLI, Copilot CLI, Codex CLI, Codex Debug, OpenClaw,",
-    "  OpenCode, Hermes, Pi Extension",
+    "  OpenCode, Hermes, Pi Extension, Gongfeng Copilot (local stubs only)",
     "",
     "Notes:",
     "  Gongfeng-Copilot hooks are managed through the plugin's Hooks UI.",
@@ -70,8 +70,12 @@ function uninstallAllAgents() {
     { name: "OpenCode", fn: () => { const { unregisterOpencodePlugin } = require("./opencode-install.js"); return unregisterOpencodePlugin(); } },
     { name: "Hermes", fn: () => { const { unregisterHermesPlugin } = require("./hermes-install.js"); return unregisterHermesPlugin(); } },
     { name: "Pi Extension", fn: () => { const { unregisterPiExtension } = require("./pi-install.js"); return unregisterPiExtension(); } },
+    { name: "Gongfeng Copilot (local stubs)", fn: () => {
+      const { removeLocalStubDir } = require("./gongfeng-copilot-uninstall.js");
+      const r = removeLocalStubDir();
+      return { removed: r.removed ? 1 : 0, changed: r.removed, error: r.error || null };
+    } },
   ];
-
   const results = [];
   let totalRemoved = 0;
   let totalChanged = 0;

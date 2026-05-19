@@ -47,6 +47,27 @@ const {
 const { focusCodexThreadTarget } = require("./session-focus-handoff");
 const { getAllAgents } = require("../agents/registry");
 
+// ── Global crash guards ──
+// 桌面宠物应用的崩溃恢复哲学：宁可静默吞掉一个异常并把状态降级回 idle，也不要弹一个
+// 全屏的 Electron 错误对话框吓到用户。process.on('uncaughtException') 必须在任何
+// BrowserWindow 创建前注册（越早越好，赶在第三方依赖加载前）。
+//
+// 故意不调用 process.exit() —— 让 Electron 主循环继续跑，用户的桌宠继续显示，
+// 至多某个状态切换被丢掉一次。如果异常严重到无法恢复（比如 Electron 自身崩了），
+// Electron 内部的 GPU/renderer crash 处理会接管。
+function _logFatal(prefix, err) {
+  try {
+    const ts = new Date().toISOString();
+    const msg = err && (err.stack || err.message || String(err));
+    // eslint-disable-next-line no-console
+    console.error(`[clawd ${ts}] ${prefix}: ${msg}`);
+  } catch {
+    // 连日志都打不出来就只能放弃了
+  }
+}
+process.on("uncaughtException", (err) => { _logFatal("uncaughtException", err); });
+process.on("unhandledRejection", (reason) => { _logFatal("unhandledRejection", reason); });
+
 // ── Autoplay policy: allow sound playback without user gesture ──
 // MUST be set before any BrowserWindow is created (before app.whenReady)
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");

@@ -14,46 +14,89 @@ const os = require("os");
 
 const DEFAULT_PARENT_DIR = path.join(os.homedir(), ".gongfeng-copilot");
 const CACHE_PATH = path.join(DEFAULT_PARENT_DIR, "hooks", "hooks-cache.json");
+const LOCAL_STUB_DIR = path.join(DEFAULT_PARENT_DIR, "hooks", "clawd");
 const DISPLAY_NAME_PREFIX = "Clawd: ";
 
 /**
- * Scan hooks-cache.json for Clawd hooks (display_name starts with "Clawd: ").
- * Returns { found, events: [{ event, display_name, hook_id }] } or
- * { status: "plugin_not_installed" | "no_cache", ... }.
+ * Best-effort removal of the local .sh stub directory Clawd may have dropped.
+ * The plugin's hooks.json is cloud-synced and unmanageable from here, but
+ * we DO own ~/.gongfeng-copilot/hooks/clawd/. Deleting the stubs makes the
+ * cloud-side hook entries point to a missing file — the plugin handles that
+ * gracefully (silent skip) and the user only needs to remove the now-dead
+ * entries from the plugin UI at their leisure.
+ *
+ * @returns {{ removed: boolean, path: string, error?: string }}
+ */
+function removeLocalStubDir() {
+  try {
+    if (!fs.existsSync(LOCAL_STUB_DIR)) {
+      return { removed: false, path: LOCAL_STUB_DIR };
+    }
+    fs.rmSync(LOCAL_STUB_DIR, { recursive: true, force: true });
+    return { removed: true, path: LOCAL_STUB_DIR };
+  } catch (err) {
+    return { removed: false, path: LOCAL_STUB_DIR, error: err && err.message };
+  }
+}
+
+/**
+ * Scan hooks for Clawd entries (display_name starts with "Clawd: ").
+ *
+ * Reading strategy: prefer `hooks.json` (cloud source-of-truth) over
+ * `hooks-cache.json` (lagging local cache) — same logic as
+ * gongfeng-copilot-install.js#checkExistingClawdHooks. This keeps the
+ * uninstall wizard list in sync with what the user actually sees in the
+ * plugin UI.
+ *
+ * Returns { found, events, source } on success, or
+ * { status: "plugin_not_installed" | "no_cache" | "error", ... } on failure.
  */
 function collectClawdHooks() {
   if (!fs.existsSync(DEFAULT_PARENT_DIR)) {
     return { status: "plugin_not_installed", found: 0, events: [] };
   }
-  if (!fs.existsSync(CACHE_PATH)) {
-    return { status: "no_cache", found: 0, events: [] };
-  }
-  try {
-    const cache = JSON.parse(fs.readFileSync(CACHE_PATH, "utf-8"));
-    const events = [];
-    const hooksObj = cache.hooks || {};
-    for (const [eventName, hooks] of Object.entries(hooksObj)) {
-      if (!Array.isArray(hooks)) continue;
-      for (const hook of hooks) {
-        if (
-          hook &&
-          typeof hook === "object" &&
-          typeof hook.display_name === "string" &&
-          hook.display_name.startsWith(DISPLAY_NAME_PREFIX)
-        ) {
-          events.push({
-            event: eventName,
-            display_name: hook.display_name,
-            hook_id: hook.hook_id || "",
-            command: hook.command || "",
-          });
+
+  const hooksJsonPath = path.join(DEFAULT_PARENT_DIR, "hooks", "hooks.json");
+  const sources = [
+    { path: hooksJsonPath, label: "hooks.json" },
+    { path: CACHE_PATH, label: "hooks-cache.json" },
+  ];
+
+  let lastError = null;
+  for (const src of sources) {
+    if (!fs.existsSync(src.path)) continue;
+    try {
+      const data = JSON.parse(fs.readFileSync(src.path, "utf-8"));
+      const events = [];
+      const hooksObj = (data && data.hooks) || {};
+      for (const [eventName, hooks] of Object.entries(hooksObj)) {
+        if (!Array.isArray(hooks)) continue;
+        for (const hook of hooks) {
+          if (
+            hook &&
+            typeof hook === "object" &&
+            typeof hook.display_name === "string" &&
+            hook.display_name.startsWith(DISPLAY_NAME_PREFIX)
+          ) {
+            events.push({
+              event: eventName,
+              display_name: hook.display_name,
+              hook_id: hook.hook_id || "",
+              command: hook.command || "",
+            });
+          }
         }
       }
+      return { status: "ready", found: events.length, events, source: src.label };
+    } catch (err) {
+      lastError = err.message;
     }
-    return { status: "ready", found: events.length, events };
-  } catch (err) {
-    return { status: "error", found: 0, events: [], error: err.message };
   }
+
+  if (lastError) {
+    return { status: "error", found: 0, events: [], error: lastError };
+  }
+  return { status: "no_cache", found: 0, events: [] };
 }
 
 function escapeHtml(s) {
@@ -178,6 +221,13 @@ function prepareGongfengCopilotUninstall(options = {}) {
     fs.writeFileSync(outputPath, generateUninstallHtml(result), "utf-8");
   }
 
+  // Best-effort: remove local .sh stub directory regardless of cache state.
+  // Even when collectClawdHooks() returns no_cache / plugin_not_installed,
+  // the stub dir may still exist from a prior install.
+  const stubCleanup = options.cleanupStubs === false
+    ? { removed: false, path: LOCAL_STUB_DIR, skipped: true }
+    : removeLocalStubDir();
+
   if (!options.silent) {
     if (result.status === "plugin_not_installed") {
       console.log("Clawd: ~/.gongfeng-copilot/ 未找到 — 跳过卸载");
@@ -196,17 +246,24 @@ function prepareGongfengCopilotUninstall(options = {}) {
         console.log("   请用浏览器打开，按指引在插件 UI 中逐条删除。");
       }
     }
+    if (stubCleanup && stubCleanup.removed) {
+      console.log(`Clawd: 已删除本地 stub 目录 ${stubCleanup.path}`);
+    } else if (stubCleanup && stubCleanup.error) {
+      console.log(`Clawd: 删除本地 stub 目录失败 (${stubCleanup.path}): ${stubCleanup.error}`);
+    }
   }
 
-  return { ...result, outputPath };
+  return { ...result, outputPath, stubCleanup };
 }
 
 module.exports = {
   collectClawdHooks,
   generateUninstallHtml,
   prepareGongfengCopilotUninstall,
+  removeLocalStubDir,
   DEFAULT_PARENT_DIR,
   CACHE_PATH,
+  LOCAL_STUB_DIR,
 };
 
 if (require.main === module) {
