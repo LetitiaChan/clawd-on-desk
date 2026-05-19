@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Node.js install guidance in wizard and doctor modal.** When `node` is not detected on the system, the Gongfeng Copilot wizard now renders a dedicated step ⓪ (before the Bash step ①) with per-platform install commands: Windows (`winget install OpenJS.NodeJS.LTS` + msi download + nvm-windows/Volta/Scoop/Chocolatey), macOS (`brew install node@20` + nvm/Volta), Linux (`apt`/`dnf`/`pacman` + NodeSource + nvm/Volta). The wizard meta-info also shows Node detection status (✅ / ⚠️). The Settings → Doctor modal's Node.js check now displays inline install commands for all three platforms when Node is missing, in all 5 UI locales. The abandoned "bundled Node" approach (`scripts/fetch-node-portable.js`, never committed) has been removed.
+- **10 new test cases** (`test/gongfeng-copilot-node-guide.test.js`): covers `_detectNodeAvailability`, `_renderNodeSection` per-platform rendering, and wizard integration.
+
 ---
 
 ## [0.7.13] - 2026-05-19
