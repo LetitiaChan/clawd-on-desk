@@ -341,16 +341,38 @@ function generateHtmlWizard(result, detection) {
   // Lazy-resolve detection so callers (CLI / Settings / tests) don't have
   // to know about the detector module. Tests can pass an explicit
   // `detection` object to lock down rendering for a specific platform/state.
+  const detectorErrors = [];
   if (!detection) {
     try {
       // eslint-disable-next-line global-require
       const { detectBashPaths } = require("./gongfeng-bash-detector");
       detection = detectBashPaths();
-    } catch (_e) {
+    } catch (err) {
       // detector module unavailable (shouldn't happen in shipped builds);
-      // _renderBashSection has its own defensive fallback.
-      detection = { platform: process.platform, found: [], candidates: [] };
+      // _renderBashSection has its own defensive fallback. 不再静默吞：
+      // 记下错误堆栈渲染到 wizard footer，方便现场排查。
+      detectorErrors.push(
+        `require('./gongfeng-bash-detector') / detectBashPaths() failed: ${
+          (err && err.stack) || (err && err.message) || String(err)
+        }`
+      );
+      try {
+        // eslint-disable-next-line no-console
+        console.error("[gongfeng-wizard] detector load/exec failed:", err);
+      } catch (_e) {}
+      detection = {
+        platform: process.platform,
+        found: [],
+        candidates: [],
+        diagnostics: ["detector module failed to load (see footer)"],
+      };
     }
+  }
+  if (detection && !Array.isArray(detection.diagnostics)) {
+    detection.diagnostics = [];
+  }
+  if (detectorErrors.length) {
+    detection.diagnostics.unshift(...detectorErrors);
   }
 
   const snippetsHtml = (result.snippets || []).map((snippet, index) => `
@@ -368,6 +390,20 @@ function generateHtmlWizard(result, detection) {
   const snippetsJson = JSON.stringify((result.snippets || []).map(s => s.shell_snippet));
   const found = (result.existing && result.existing.found) || 0;
   const ready = result.status === 'ready';
+
+  // 诊断信息（footer 中的 <details>）：在 packaged exe 上未检测到 bash
+  // 但实际是装了的场景（bug 2026-05-19）可用这里的输出快速定位问题到底是 env
+  // 缺失、fs.existsSync 假阴还是 which 失败。主动隐藏部分环境变量避免泄露
+  // 不必要信息。
+  const diagnosticsLines = (detection && Array.isArray(detection.diagnostics))
+    ? detection.diagnostics.map(s => String(s))
+    : [];
+  const candidateLines = (detection && Array.isArray(detection.candidates))
+    ? detection.candidates.map((c, i) => `${i + 1}. ${c.path}  — ${c.label || ""}`)
+    : [];
+  const foundLines = (detection && Array.isArray(detection.found))
+    ? detection.found.map((c, i) => `✅ ${i + 1}. ${c.path}  — ${c.label || ""} (source=${c.source || "?"})`)
+    : [];
 
   const { banner: bashBanner, stepBlock: bashStep } = _renderBashSection(detection);
   const recommendedPath = (detection.found && detection.found[0] && detection.found[0].path) || null;
@@ -465,6 +501,24 @@ ${bashStep}
 <div class="step">
   <h2>🔧 11 个事件钩子配置</h2>
   ${snippetsHtml}
+</div>
+
+<div class="step">
+  <h2>🧪 诊断信息（快速排查用）</h2>
+  <p style="color:#666;font-size:13px;">如果顶部提示未检测到 Bash 但你本机实际装了 Git for Windows，展开下面三块获取 Clawd 看到的现场：</p>
+  <details>
+    <summary>仅检查到的 bash（${foundLines.length} 条）</summary>
+    <pre id="clawd-diag-found">${_escHtml(foundLines.join('\n') || '(空)')}</pre>
+  </details>
+  <details>
+    <summary>扫描过的候选路径（${candidateLines.length} 条）</summary>
+    <pre id="clawd-diag-candidates">${_escHtml(candidateLines.join('\n') || '(空)')}</pre>
+  </details>
+  <details>
+    <summary>运行时诊断记录（${diagnosticsLines.length} 条）</summary>
+    <pre id="clawd-diag-log">${_escHtml(diagnosticsLines.join('\n') || '(空)')}</pre>
+  </details>
+  <p style="color:#666;font-size:12px;margin-top:8px;">若你打开该向导是从 <strong>Clawd 设置 → Agents → 生成配置向导</strong>，且三块都为空/缺失 → 请复制本页 URL 反馈给开发者。</p>
 </div>
 
 <script>

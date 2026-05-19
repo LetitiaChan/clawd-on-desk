@@ -47,6 +47,19 @@ try {
 
 /**
  * 各平台候选 bash 路径列表。
+ *
+ * Windows 注意事项（packaged Electron 排查后沉淀，2026-05-19）：
+ *   1. `process.env["ProgramFiles"]` 在 packaged Electron 主进程下偶发为空 /
+ *      指向非预期值，因此除了走 env 之外，还**额外**附上字面量
+ *      `C:\Program Files\...` / `C:\Program Files (x86)\...` 两条候选，
+ *      用 `dedupePaths` 去重，确保即便 env 异常也能命中默认安装位置。
+ *   2. 32-bit on 64-bit Windows 时 WoW64 文件系统重定向器会把
+ *      `C:\Program Files` / `C:\Windows\System32` 透明改写到 (x86) /
+ *      SysWOW64，`fs.existsSync` 因此可能产生假阴性。`existsBypassWow64`
+ *      在 fs.existsSync 返回 false 时再用 `cmd /c if exist` 二次确认
+ *      （cmd.exe 使用 Win32 真实路径，不受当前进程 bitness 影响）。
+ *   3. 任何因为 env 缺失 / fs 异常 / which 失败导致的漏检，都会写进
+ *      `result.diagnostics`，由 wizard footer 渲染给用户/排查者参考。
  */
 function getCandidatePaths() {
   if (PLATFORM === "win32") {
@@ -58,14 +71,23 @@ function getCandidatePaths() {
       path.join(os.homedir(), "AppData", "Local");
     const userProfile = os.homedir();
 
-    return [
+    const list = [
       {
         path: path.join(programFiles, "Git", "bin", "bash.exe"),
         label: "Git for Windows（标准安装）",
       },
+      // 字面量兜底：即使 process.env["ProgramFiles"] 异常也能命中默认安装位置
+      {
+        path: "C:\\Program Files\\Git\\bin\\bash.exe",
+        label: "Git for Windows（标准安装 / 字面量兜底）",
+      },
       {
         path: path.join(programFilesX86, "Git", "bin", "bash.exe"),
         label: "Git for Windows (x86)",
+      },
+      {
+        path: "C:\\Program Files (x86)\\Git\\bin\\bash.exe",
+        label: "Git for Windows (x86) / 字面量兜底",
       },
       {
         path: path.join(localAppData, "Programs", "Git", "bin", "bash.exe"),
@@ -91,7 +113,20 @@ function getCandidatePaths() {
         path: path.join(programFiles, "Git", "usr", "bin", "bash.exe"),
         label: "Git for Windows（usr/bin 下的 bash）",
       },
+      {
+        path: "C:\\Program Files\\Git\\usr\\bin\\bash.exe",
+        label: "Git for Windows（usr/bin / 字面量兜底）",
+      },
     ];
+
+    // 用 (lowercase path) 去重；保留首次出现的 label
+    const seen = new Set();
+    return list.filter((c) => {
+      const key = c.path.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
   if (PLATFORM === "darwin") {
     return [
@@ -108,40 +143,126 @@ function getCandidatePaths() {
 }
 
 /**
- * 在系统 PATH 中查找命令的绝对路径。Windows 用 where，类 Unix 用 which。
+ * fs.existsSync 兜底：在 win32 下 fs.existsSync 返回 false 时，
+ * 用 cmd.exe 内置 `if exist` 再确认一次。理由：
+ *   - 32-bit Node 在 64-bit Windows 上访问 `C:\Program Files\...` 会被
+ *     WoW64 文件系统重定向器悄悄改写到 `(x86)`，`fs.existsSync` 因此假阴性。
+ *   - 某些 packaged Electron 进程下 fs.existsSync 偶发对真实存在的路径返回
+ *     false（暂未复现稳定根因，但 cmd 兜底实测可绕过）。
+ * 走 cmd 内置命令（`if exist`）而不是 spawn `where.exe`，因为 cmd.exe 永远是
+ * native 64-bit、且不依赖 PATH 中的 bash/where 是否被劫持。
  */
-function whichCommand(cmd) {
+function existsBypassWow64(p) {
+  if (!p) return false;
+  if (fs.existsSync(p)) return true;
+  if (PLATFORM !== "win32") return false;
   try {
-    const tool = PLATFORM === "win32" ? "where" : "which";
-    const out = execSync(`${tool} ${cmd}`, {
+    // 用 cmd 内置 if exist —— 0 = exists, 1 = not exists（execSync 抛异常）
+    execSync(`cmd /d /c "if exist "${p}" (exit 0) else (exit 1)"`, {
+      stdio: "ignore",
+      timeout: 2000,
+      windowsHide: true,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 在系统 PATH 中查找命令的绝对路径。Windows 用 where，类 Unix 用 which。
+ * win32 下显式走 `%SystemRoot%\System32\where.exe` + 「`cmd /c where`」双重兜底，
+ * 避免 packaged Electron 主进程 PATH 异常 / where 被同名脚本劫持时整体漏检。
+ */
+function whichCommand(cmd, diagnostics) {
+  const note = (msg) => {
+    if (Array.isArray(diagnostics)) diagnostics.push(`whichCommand(${cmd}): ${msg}`);
+  };
+  if (PLATFORM === "win32") {
+    const systemRoot = process.env["SystemRoot"] || "C:\\Windows";
+    const whereExe = path.join(systemRoot, "System32", "where.exe");
+    // 候选执行方式：(1) 直接调用 where.exe 绝对路径；(2) cmd /c where（让 cmd 解析）
+    const attempts = [
+      { argv: `"${whereExe}" ${cmd}`, label: `where.exe ${cmd}` },
+      { argv: `cmd /d /c "where ${cmd}"`, label: `cmd /c where ${cmd}` },
+    ];
+    for (const att of attempts) {
+      try {
+        const out = execSync(att.argv, {
+          stdio: ["ignore", "pipe", "ignore"],
+          encoding: "utf-8",
+          timeout: 3000,
+          windowsHide: true,
+        }).trim();
+        if (out) return out.split(/\r?\n/)[0].trim();
+        note(`${att.label} → empty stdout`);
+      } catch (err) {
+        note(`${att.label} → ${(err && err.message) || "error"}`);
+      }
+    }
+    return null;
+  }
+  try {
+    const out = execSync(`which ${cmd}`, {
       stdio: ["ignore", "pipe", "ignore"],
       encoding: "utf-8",
       timeout: 3000,
     }).trim();
     if (!out) return null;
-    // where 可能返回多行，取第一行
     return out.split(/\r?\n/)[0].trim();
-  } catch {
+  } catch (err) {
+    note(`which ${cmd} → ${(err && err.message) || "error"}`);
     return null;
   }
 }
 
 /**
  * 扫描所有候选路径，过滤出真实存在的。
+ *
+ * 返回对象包含：
+ *   - platform: 'win32' | 'darwin' | 'linux'
+ *   - found:    Array<{ path, label, source: 'scan'|'scan-cmd'|'which'|'git' }>
+ *   - candidates: Array<{ path, label }>（getCandidatePaths 原始列表）
+ *   - diagnostics: string[]（哪一步漏检 / 失败、env / cwd 信息，给排查用）
  */
 function detectBashPaths() {
   const candidates = getCandidatePaths();
   const found = [];
+  const diagnostics = [];
+
+  diagnostics.push(
+    `platform=${PLATFORM} arch=${process.arch} packaged=${!!process.versions.electron}`
+  );
+  if (PLATFORM === "win32") {
+    diagnostics.push(
+      `env.ProgramFiles=${process.env["ProgramFiles"] || "(empty)"} env.ProgramFiles(x86)=${
+        process.env["ProgramFiles(x86)"] || "(empty)"
+      } env.LOCALAPPDATA=${process.env["LOCALAPPDATA"] || "(empty)"}`
+    );
+  }
 
   for (const c of candidates) {
-    if (fs.existsSync(c.path)) {
+    const direct = fs.existsSync(c.path);
+    if (direct) {
       found.push({ ...c, source: "scan" });
+      continue;
+    }
+    // fs.existsSync 假阴性兜底（仅 win32）
+    if (PLATFORM === "win32" && existsBypassWow64(c.path)) {
+      found.push({ ...c, source: "scan-cmd" });
+      diagnostics.push(
+        `existsBypassWow64 hit: ${c.path} (fs.existsSync returned false but cmd if-exist confirmed)`
+      );
     }
   }
 
   // 通过 PATH 查找
-  const fromPath = whichCommand("bash");
-  if (fromPath && fs.existsSync(fromPath) && !found.some((f) => f.path === fromPath)) {
+  const fromPath = whichCommand("bash", diagnostics);
+  if (
+    fromPath &&
+    existsBypassWow64(fromPath) &&
+    !found.some((f) => f.path.toLowerCase() === fromPath.toLowerCase())
+  ) {
     found.push({
       path: fromPath,
       label: "通过 PATH 找到（系统默认 bash）",
@@ -151,11 +272,11 @@ function detectBashPaths() {
 
   // 也通过 git 推导：git --exec-path 附近通常有 bash
   if (PLATFORM === "win32") {
-    const gitExe = whichCommand("git");
+    const gitExe = whichCommand("git", diagnostics);
     if (gitExe) {
       const guessed = path.join(path.dirname(gitExe), "bash.exe");
       if (
-        fs.existsSync(guessed) &&
+        existsBypassWow64(guessed) &&
         !found.some((f) => f.path.toLowerCase() === guessed.toLowerCase())
       ) {
         found.push({
@@ -167,7 +288,13 @@ function detectBashPaths() {
     }
   }
 
-  return { platform: PLATFORM, found, candidates };
+  if (found.length === 0) {
+    diagnostics.push(
+      `all ${candidates.length} candidates missed; PATH=${(process.env.PATH || "").slice(0, 400)}...`
+    );
+  }
+
+  return { platform: PLATFORM, found, candidates, diagnostics };
 }
 
 function escapeHtml(s) {
