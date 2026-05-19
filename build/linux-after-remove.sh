@@ -172,7 +172,7 @@ remove_clawd_from_toml() {
   done
   [ "$found" -eq 1 ] || return 0
 
-  local backup="${file}.clawd-uninstall-$(date +%Y%m%d-%H%M%S).bak"
+  local backup="$file.clawd-uninstall-$(date +%Y%m%d-%H%M%S).bak"
   cp "$file" "$backup"
 
   # Use sed to remove [[hooks]] blocks containing markers

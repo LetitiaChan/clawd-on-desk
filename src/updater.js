@@ -4,7 +4,8 @@ const path = require("path");
 const fs = require("fs");
 const electron = require("electron");
 
-const isMac = process.platform === "darwin";
+// NOTE: Do not use module-level platform checks inside initUpdater();
+// use `runtimePlatform` (from deps.platform) instead so tests can inject it.
 const RELEASES_LATEST_URL = "https://github.com/LetitiaChan/clawd-on-desk/releases/latest";
 
 function makeTranslate(ctx) {
@@ -602,10 +603,10 @@ path: "/repos/LetitiaChan/clawd-on-desk/releases/latest",
       rebuildMenus();
 
       await promptAvailableUpdate({
-        mode: isMac ? "mac" : "win",
+        mode: runtimePlatform === "darwin" ? "mac" : "win",
         version: info.version,
         onPrimary: async () => {
-          if (isMac) {
+          if (runtimePlatform === "darwin") {
             shell.openExternal(RELEASES_LATEST_URL);
             updateStatus = "idle";
             manualUpdateCheck = false;

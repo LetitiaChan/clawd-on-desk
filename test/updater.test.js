@@ -378,6 +378,7 @@ describe("updater visual flow", () => {
       },
     });
     const updater = initUpdater(ctx, makeDeps({
+      platform: "win32",
       autoUpdaterFactory: () => ({
         autoDownload: false,
         autoInstallOnAppQuit: true,
