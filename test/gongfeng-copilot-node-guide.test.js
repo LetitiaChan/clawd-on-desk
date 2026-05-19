@@ -139,4 +139,32 @@ describe("Wizard HTML Node.js install guide integration", () => {
     // Since we're running in Node, it should show the checkmark
     assert.ok(html.includes("✅"), "must show ✅ for detected Node");
   });
+
+  it("meta-info Node path must be an absolute path, not the bare literal 'node'", () => {
+    // Regression for the "wizard html shows no node info" report:
+    // earlier the meta-info Node line fell back to result.node_bin (which
+    // is the literal string "node" on win32 by resolveNodeBin's contract).
+    // After the fix, when Node IS detected the line must show the *real*
+    // absolute path returned by `where node` (win32) or resolveNodeBin
+    // (mac/linux) — never the bare literal "node".
+    const html = renderWizard({
+      platform: "linux",
+      found: [{ path: "/bin/bash", label: "test", source: "scan" }],
+      candidates: [],
+    });
+    const m = html.match(/Node:\s*([^<]*)<br>/);
+    assert.ok(m, "must be able to extract Node line from meta-info");
+    const nodeLine = m[1].trim();
+    assert.notStrictEqual(
+      nodeLine.replace(/\s*✅\s*$/, "").trim(),
+      "node",
+      "meta-info Node must not be the bare literal 'node' (win32 resolveNodeBin sentinel)"
+    );
+    // Sanity: detected line should either be an absolute path or the
+    // explicit '(detected)' fallback marker — never the sentinel.
+    assert.ok(
+      /[\\/]/.test(nodeLine) || nodeLine.includes("(detected)") || nodeLine.includes("未检测到"),
+      `Node line should look like an absolute path or fallback marker, got: ${nodeLine}`
+    );
+  });
 });

@@ -19,6 +19,7 @@ const path = require('path');
 const {
   prepareGongfengCopilotSnippets,
   generateHtmlWizard,
+  _detectNodeAvailability,
 } = require('../hooks/gongfeng-copilot-install.js');
 
 function parseArgs(argv) {
@@ -105,7 +106,19 @@ function main() {
     console.log('📋 配置摘要:');
     console.log(`   - 插件状态: ${result.status === 'ready' ? '已安装' : '未安装'}`);
     console.log(`   - 已配置钩子: ${result.existing.found}/11`);
-    console.log(`   - Node 路径: ${result.node_bin}`);
+    // Resolve the *real* node path via the same detector the HTML wizard uses,
+    // so the CLI summary doesn't print a misleading bare "node" on Windows
+    // (resolveNodeBin returns the literal string "node" on win32 by design).
+    let nodeSummary;
+    try {
+      const ns = _detectNodeAvailability();
+      nodeSummary = ns.available
+        ? `${ns.nodePath} ✅`
+        : '⚠️ 未检测到 — 详见生成的 HTML 中的「⓪ 安装 Node.js」步骤';
+    } catch (_e) {
+      nodeSummary = `${result.node_bin} (detector unavailable)`;
+    }
+    console.log(`   - Node: ${nodeSummary}`);
     console.log(`   - Hook 脚本: ${result.hook_script}`);
     console.log('');
     console.log('🚀 下一步:');

@@ -599,7 +599,7 @@ ${bashBanner}
   </div>
   ${ready ? `<div class="progress" style="width: ${(found / 11) * 100}%"></div>` : ''}
   <div class="meta-info">
-    Node: ${nodeStatus.available ? _escHtml(nodeStatus.nodePath || result.node_bin || '(default)') + ' ✅' : '⚠️ 未检测到 — 请先按下方步骤安装'}<br>
+    Node: ${nodeStatus.available ? _escHtml(nodeStatus.nodePath || '(detected)') + ' ✅' : '⚠️ 未检测到 — 请先按下方步骤安装'}<br>
     Hook: ${result.hook_script || '(default)'}<br>
     Bash: ${recommendedPath ? _escHtml(recommendedPath) + ' ✨' : '(未检测到 — 请先按下方步骤安装)'}
   </div>
