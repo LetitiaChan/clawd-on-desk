@@ -19,6 +19,7 @@ docs/**
 !docs/guides/
 !docs/guides/copilot-setup.md
 !docs/guides/guide-theme-creation.md
+!docs/guides/guide-theme-creation.zh-CN.md
 !docs/guides/known-limitations.md
 !docs/guides/known-limitations.zh-CN.md
 !docs/guides/setup-guide.md
