@@ -2,8 +2,8 @@ name: Sync Upstream Main
 
 on:
   schedule:
-    # 每 6 小时检查一次上游 main 是否有更新（UTC 时间）
-    - cron: "0 */6 * * *"
+    # 每天 UTC 4:00（北京时间 12:00）检查一次上游 main 是否有更新
+    - cron: "0 4 * * *"
   workflow_dispatch:
 
 permissions:
