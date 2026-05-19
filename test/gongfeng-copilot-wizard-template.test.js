@@ -10,18 +10,36 @@
 // "tell the user how to verify the hooks via the desktop pet states"
 // and "explain the exact CodeBuddy click path" — cannot regress
 // without a deliberate test update.
+//
+// As of the bash auto-detection fix, the wizard MUST NOT hard-code
+// "C:\\Program Files\\Git\\bin\\bash.exe" as the canonical path —
+// instead it renders whatever detectBashPaths() returned for the
+// current machine, and falls back to a per-platform install guide
+// (winget for Windows, brew/apt for *nix) when nothing is found.
+// Tests below pass an explicit `detection` argument so they don't
+// depend on the host machine running the test suite.
 
 const { describe, it } = require("node:test");
 const assert = require("node:assert");
 
 const { generateHtmlWizard } = require("../hooks/gongfeng-copilot-install");
 
-function renderMinimalWizard({ status = "ready", found = 5, snippets = [] } = {}) {
-  return generateHtmlWizard({
-    status,
-    existing: { found },
-    snippets,
-  });
+function renderMinimalWizard({ status = "ready", found = 5, snippets = [], detection } = {}) {
+  // Default detection = "found one bash on Linux" so legacy tests that
+  // don't care about the bash section still get a deterministic render.
+  const det = detection || {
+    platform: "linux",
+    found: [{ path: "/bin/bash", label: "Linux 标准 bash", source: "scan" }],
+    candidates: [],
+  };
+  return generateHtmlWizard(
+    {
+      status,
+      existing: { found },
+      snippets,
+    },
+    det
+  );
 }
 
 describe("Gongfeng Copilot wizard HTML template", () => {
@@ -32,12 +50,70 @@ describe("Gongfeng Copilot wizard HTML template", () => {
     assert.ok(html.includes("<title>Clawd - Gongfeng Copilot 配置向导</title>"));
   });
 
-  it("includes the Windows bash.exe path advice (regression guard against accidental removal)", () => {
-    const html = renderMinimalWizard();
+  it("does NOT hard-code the Windows bash.exe path; uses the detected path instead", () => {
+    // Simulate a machine where Git for Windows is installed under a
+    // non-default location (e.g. user-level install). The wizard MUST
+    // surface that exact path, not the legacy hard-coded
+    // "C:\\Program Files\\Git\\bin\\bash.exe".
+    const customPath = "D:\\Tools\\Git\\bin\\bash.exe";
+    const html = renderMinimalWizard({
+      detection: {
+        platform: "win32",
+        found: [{ path: customPath, label: "Git for Windows（自定义路径）", source: "scan" }],
+        candidates: [],
+      },
+    });
     assert.ok(
-      html.includes("C:\\Program Files\\Git\\bin\\bash.exe"),
-      "wizard must keep the Windows bash.exe path advice"
+      html.includes(customPath),
+      "wizard must surface the actual detected path, not a hard-coded default"
     );
+    // Critical regression guard: the legacy hard-coded path must not
+    // appear in the step-1 instruction line nor in the meta-info, since
+    // that's the bug being fixed (it misled users on machines where Git
+    // is installed elsewhere).
+    const legacyPath = "C:\\Program Files\\Git\\bin\\bash.exe";
+    // The legacy path may still appear once inside the "方案 B 手动下载"
+    // <details> block ONLY when detection.found is empty (as a worked
+    // example of the default install location). With found.length > 0
+    // we rendered the candidate list and SHOULD NOT mention it at all.
+    assert.ok(
+      !html.includes(legacyPath),
+      "wizard must not fall back to the legacy hard-coded path when a real bash is detected"
+    );
+  });
+
+  it("renders the Windows install guide (winget command) when no bash is detected on win32", () => {
+    const html = renderMinimalWizard({
+      detection: { platform: "win32", found: [], candidates: [] },
+    });
+    // Banner warns that bash wasn't found.
+    assert.ok(html.includes("未在本机检测到 Git Bash"), "must announce missing Git Bash");
+    // Step ① flips into "install" mode rather than "pick a path" mode.
+    assert.ok(html.includes("安装 Git Bash"), "step 1 must offer the install path");
+    // Winget one-click command must be present and copyable.
+    assert.ok(
+      html.includes("winget install --id Git.Git"),
+      "must offer a one-click winget command"
+    );
+    assert.ok(html.includes("git-scm.com/download/win"), "must keep the manual download fallback link");
+  });
+
+  it("renders the macOS install guide when no bash is detected on darwin", () => {
+    const html = renderMinimalWizard({
+      detection: { platform: "darwin", found: [], candidates: [] },
+    });
+    assert.ok(html.includes("未在本机检测到 bash"), "must announce missing bash on macOS");
+    assert.ok(html.includes("brew install bash"), "must suggest Homebrew on macOS");
+    // No winget on macOS.
+    assert.ok(!html.includes("winget install"), "must NOT show winget on macOS");
+  });
+
+  it("renders the Linux install guide when no bash is detected on linux", () => {
+    const html = renderMinimalWizard({
+      detection: { platform: "linux", found: [], candidates: [] },
+    });
+    assert.ok(html.includes("apt install bash") || html.includes("dnf install bash"));
+    assert.ok(!html.includes("winget install"), "must NOT show winget on Linux");
   });
 
   it("explains the exact CodeBuddy click path for creating hooks", () => {
@@ -95,14 +171,21 @@ describe("Gongfeng Copilot wizard HTML template", () => {
     const secondIdx = html.indexOf("2. Stop");
     assert.ok(firstIdx > -1 && secondIdx > firstIdx, "snippet cards must appear in the provided order");
 
-    // copy-button hooks present once per snippet
+    // copy-button hooks present once per snippet (snippet card buttons
+    // call copyToClipboard(N); other copy buttons in the wizard call
+    // copyText('elem-id', ...) so they don't collide).
     const copyButtonMatches = html.match(/copyToClipboard\(\d+\)/g) || [];
     assert.strictEqual(copyButtonMatches.length, 2, "one copy button per snippet card");
   });
 
   it("survives empty / missing snippet & existing fields without throwing", () => {
     // Defensive: status:"not_ready", found undefined, snippets undefined.
-    const html = generateHtmlWizard({ status: "not_ready" });
+    // We still pass an explicit detection so the bash section renders
+    // deterministically rather than poking the host machine.
+    const html = generateHtmlWizard(
+      { status: "not_ready" },
+      { platform: "linux", found: [{ path: "/bin/bash", label: "Linux 标准 bash" }] }
+    );
     assert.ok(typeof html === "string" && html.length > 0);
     // Still emits the click-path and three-state guidance even when not ready.
     assert.ok(html.includes("管理 Hooks"));

@@ -158,23 +158,40 @@ describe("package build config", () => {
 
     it("fetches and verifies pinned sidecars before release builds", () => {
       const workflow = fs.readFileSync(path.join(ROOT, ".github", "workflows", "build.yml"), "utf8");
+
+      // build.yml is matrix-driven (one job per platform), so the
+      // fetch / verify / build commands are interpolated. We verify:
+      //   (A) matrix.include declares the three platforms with the
+      //       expected (sidecar-targets, verify-arg) pairs;
+      //   (B) the run-steps invoke the pinned-sidecar pipeline in the
+      //       canonical order (fetch:sidecars → verify-sidecar-binaries
+      //       → electron-builder) using matrix interpolation.
+      const expectedMatrix = [
+        { targets: "windows-x64,windows-arm64", verify: "prebuild:win:all", flag: "--win" },
+        { targets: "darwin-x64,darwin-arm64", verify: "prebuild:mac", flag: "--mac" },
+        { targets: "linux-x64", verify: "prebuild:linux", flag: "--linux" },
+      ];
+      for (const { targets, verify, flag } of expectedMatrix) {
+        assert.ok(
+          workflow.includes(`sidecar-targets: "${targets}"`),
+          `build.yml matrix should declare sidecar-targets "${targets}"`
+        );
+        assert.ok(
+          workflow.includes(`verify-arg: "${verify}"`),
+          `build.yml matrix should declare verify-arg "${verify}"`
+        );
+        assert.ok(
+          workflow.includes(`builder-flag: "${flag}"`),
+          `build.yml matrix should declare builder-flag "${flag}"`
+        );
+      }
+
+      // Steps must call the matrix-driven pipeline in the right order.
       assertWorkflowOrder(
         workflow,
-        "npm run fetch:sidecars -- --target windows-x64,windows-arm64",
-        "node scripts/verify-sidecar-binaries.js prebuild:win:all",
-        "npx electron-builder --win --publish never"
-      );
-      assertWorkflowOrder(
-        workflow,
-        "npm run fetch:sidecars -- --target darwin-x64,darwin-arm64",
-        "node scripts/verify-sidecar-binaries.js prebuild:mac",
-        "npx electron-builder --mac --publish never"
-      );
-      assertWorkflowOrder(
-        workflow,
-        "npm run fetch:sidecars -- --target linux-x64",
-        "node scripts/verify-sidecar-binaries.js prebuild:linux",
-        "npx electron-builder --linux --publish never"
+        "npm run fetch:sidecars -- --target ${{ matrix.sidecar-targets }}",
+        "node scripts/verify-sidecar-binaries.js ${{ matrix.verify-arg }}",
+        "npx electron-builder ${{ matrix.builder-flag }} --publish never"
       );
     });
 
