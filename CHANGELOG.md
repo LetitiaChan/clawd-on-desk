@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.7.13] - 2026-05-19
+
+> Tag: `v0.7.13` · Release notes: [`docs/releases/release-v0.7.13.md`](docs/releases/release-v0.7.13.md)
+
 ### Added
 - **Gongfeng Copilot wizard — auto-detect Bash & per-platform install guidance.** `generateHtmlWizard` (in `hooks/gongfeng-copilot-install.js`) now lazily calls `detectBashPaths()` from `hooks/gongfeng-bash-detector.js` (or accepts an explicit `detection` parameter for tests) and renders the Bash-path block dynamically: when one or more bash candidates are found it lists all of them with the most likely one tagged "✨ 推荐" and copy-paste buttons; when none are found it switches to platform-specific install guidance — Windows offers a one-click `winget install --id Git.Git -e --source winget --accept-source-agreements --accept-package-agreements` command (plus Scoop/Choco/官网手动下载 fallbacks), macOS suggests `brew install bash`, Linux lists `apt`/`dnf`/`pacman` commands. Closes the bug where the wizard hard-coded `C:\Program Files\Git\bin\bash.exe` and misled users whose Git is installed elsewhere or not installed at all.
 - **Three new wizard template invariant tests** (`test/gongfeng-copilot-wizard-template.test.js`): renders the winget command on Windows when no bash detected, renders `brew install bash` on macOS when no bash detected, renders Linux package-manager commands on Linux when no bash detected. The previous "must include `C:\Program Files\Git\bin\bash.exe`" assertion has been **inverted** into a regression guard that the legacy hard-coded path no longer leaks into the rendered HTML when a real path was detected.
@@ -144,7 +150,8 @@ The following versions predate this fork's divergence point and were tagged on t
 - **Pure internal documentation changes** (rules, progress notes, etc.) may skip CHANGELOG updates.
 - **No local packaging.** Per `project-continuity` rule §header, `electron-builder` and platform installer artifacts are produced **only** by `.github/workflows/build.yml` on tag push; never attach a locally-built installer to a GitHub Release. Local work stops at `npm test` + commit + push.
 
-[Unreleased]: https://github.com/LetitiaChan/clawd-on-desk/compare/v0.7.12...HEAD
+[Unreleased]: https://github.com/LetitiaChan/clawd-on-desk/compare/v0.7.13...HEAD
+[0.7.13]: https://github.com/LetitiaChan/clawd-on-desk/compare/v0.7.12...v0.7.13
 [0.7.12]: https://github.com/LetitiaChan/clawd-on-desk/releases/tag/v0.7.12
 [0.7.11]: https://github.com/LetitiaChan/clawd-on-desk/releases/tag/v0.7.11
 [0.7.10]: https://github.com/LetitiaChan/clawd-on-desk/releases/tag/v0.7.10
