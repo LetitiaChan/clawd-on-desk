@@ -235,10 +235,39 @@ timeout = 30
   return { added: KIMI_HOOK_EVENTS.length, skipped: 0, updated: 0 };
 }
 
+/**
+ * Unregister all Clawd hooks from ~/.kimi/config.toml
+ * @param {object} [options]
+ * @param {string} [options.settingsPath]
+ * @returns {{ removed: number, changed: boolean }}
+ */
+function unregisterKimiHooks(options = {}) {
+  const settingsPath = options.settingsPath || DEFAULT_CONFIG_PATH;
+  let content = "";
+  try {
+    content = fs.readFileSync(settingsPath, "utf-8");
+  } catch (err) {
+    if (err.code === "ENOENT") return { removed: 0, changed: false };
+    throw new Error(`Failed to read config.toml: ${err.message}`);
+  }
+
+  const result = stripClawdKimiHookBlocks(content);
+  if (result.removed === 0) {
+    return { removed: 0, changed: false };
+  }
+
+  // Clean up trailing whitespace from removed blocks
+  const cleaned = result.content.replace(/\n{3,}/g, "\n\n").trimEnd() + "\n";
+  fs.writeFileSync(settingsPath, cleaned);
+
+  return { removed: result.removed, changed: true };
+}
+
 module.exports = {
   DEFAULT_PARENT_DIR,
   DEFAULT_CONFIG_PATH,
   registerKimiHooks,
+  unregisterKimiHooks,
   KIMI_HOOK_EVENTS,
   normalizePermissionMode,
   extractExistingPermissionMode,
@@ -250,7 +279,12 @@ module.exports = {
 
 if (require.main === module) {
   try {
-    registerKimiHooks({});
+    if (process.argv.includes("--uninstall")) {
+      const { removed, changed } = unregisterKimiHooks({});
+      console.log(`Clawd Kimi hooks uninstall: removed=${removed}, changed=${changed}`);
+    } else {
+      registerKimiHooks({});
+    }
   } catch (err) {
     console.error(err.message);
     process.exit(1);

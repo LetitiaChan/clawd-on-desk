@@ -4,7 +4,8 @@
 // Usage:
 //   node hooks/uninstall.js                     # uninstall Claude hooks (default)
 //   node hooks/uninstall.js gongfeng-copilot    # generate gongfeng-copilot uninstall wizard (HTML)
-//   node hooks/uninstall.js all                 # both
+//   node hooks/uninstall.js all-agents          # unregister hooks from ALL supported agents
+//   node hooks/uninstall.js all                 # all-agents + gongfeng-copilot wizard
 //   node hooks/uninstall.js -h | --help
 
 const argv = process.argv.slice(2);
@@ -16,8 +17,14 @@ function printHelp() {
     "Usage:",
     "  node hooks/uninstall.js                  Uninstall Claude hooks (default)",
     "  node hooks/uninstall.js gongfeng-copilot Generate gongfeng-copilot uninstall wizard",
-    "  node hooks/uninstall.js all              Run both of the above",
+    "  node hooks/uninstall.js all-agents       Unregister hooks from ALL supported agents",
+    "  node hooks/uninstall.js all              Run all-agents + gongfeng-copilot wizard",
     "  -h, --help                                Show this help",
+    "",
+    "Supported agents for all-agents:",
+    "  Claude Code, CodeBuddy, Gemini CLI, Cursor Agent, Kiro CLI,",
+    "  Kimi CLI, Copilot CLI, Codex CLI, Codex Debug, OpenClaw,",
+    "  OpenCode, Hermes, Pi Extension",
     "",
     "Notes:",
     "  Gongfeng-Copilot hooks are managed through the plugin's Hooks UI.",
@@ -43,6 +50,54 @@ function uninstallGongfeng() {
   prepareGongfengCopilotUninstall(opts);
 }
 
+/**
+ * Unregister hooks from ALL supported agents.
+ * Each agent is wrapped in try/catch so one failure doesn't block others.
+ * @returns {{ results: object[] }}
+ */
+function uninstallAllAgents() {
+  const agents = [
+    { name: "Claude Code", fn: () => { const { unregisterHooks } = require("./install.js"); return unregisterHooks(); } },
+    { name: "CodeBuddy", fn: () => { const { unregisterCodeBuddyHooks } = require("./codebuddy-install.js"); return unregisterCodeBuddyHooks(); } },
+    { name: "Gemini CLI", fn: () => { const { unregisterGeminiHooks } = require("./gemini-install.js"); return unregisterGeminiHooks(); } },
+    { name: "Cursor Agent", fn: () => { const { unregisterCursorHooks } = require("./cursor-install.js"); return unregisterCursorHooks(); } },
+    { name: "Kiro CLI", fn: () => { const { unregisterKiroHooks } = require("./kiro-install.js"); return unregisterKiroHooks(); } },
+    { name: "Kimi CLI", fn: () => { const { unregisterKimiHooks } = require("./kimi-install.js"); return unregisterKimiHooks(); } },
+    { name: "Copilot CLI", fn: () => { const { unregisterCopilotHooks } = require("./copilot-install.js"); return unregisterCopilotHooks(); } },
+    { name: "Codex CLI", fn: () => { const { unregisterCodexHooks } = require("./codex-install.js"); return unregisterCodexHooks(); } },
+    { name: "Codex Debug", fn: () => { const { unregisterCodexDebugHooks } = require("./codex-debug-install.js"); return unregisterCodexDebugHooks(); } },
+    { name: "OpenClaw", fn: () => { const { unregisterOpenClawPlugin } = require("./openclaw-install.js"); return unregisterOpenClawPlugin(); } },
+    { name: "OpenCode", fn: () => { const { unregisterOpencodePlugin } = require("./opencode-install.js"); return unregisterOpencodePlugin(); } },
+    { name: "Hermes", fn: () => { const { unregisterHermesPlugin } = require("./hermes-install.js"); return unregisterHermesPlugin(); } },
+    { name: "Pi Extension", fn: () => { const { unregisterPiExtension } = require("./pi-install.js"); return unregisterPiExtension(); } },
+  ];
+
+  const results = [];
+  let totalRemoved = 0;
+  let totalChanged = 0;
+
+  console.log("Clawd: unregistering hooks from all agents...\n");
+
+  for (const agent of agents) {
+    try {
+      const result = agent.fn();
+      const removed = result.removed || 0;
+      const changed = result.changed ? 1 : 0;
+      totalRemoved += removed;
+      totalChanged += changed;
+      const status = changed ? `✓ removed ${removed} hook(s)` : "— no hooks found";
+      console.log(`  ${agent.name}: ${status}`);
+      results.push({ name: agent.name, ...result, error: null });
+    } catch (err) {
+      console.log(`  ${agent.name}: ✗ error — ${err.message}`);
+      results.push({ name: agent.name, removed: 0, changed: false, error: err.message });
+    }
+  }
+
+  console.log(`\nSummary: ${totalRemoved} hook(s) removed across ${totalChanged} agent(s)`);
+  return { results };
+}
+
 if (argv.includes("-h") || argv.includes("--help")) {
   printHelp();
   process.exit(0);
@@ -59,8 +114,11 @@ try {
     case "gongfeng":
       uninstallGongfeng();
       break;
+    case "all-agents":
+      uninstallAllAgents();
+      break;
     case "all":
-      uninstallClaude();
+      uninstallAllAgents();
       console.log("");
       uninstallGongfeng();
       break;

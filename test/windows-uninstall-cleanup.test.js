@@ -131,8 +131,8 @@ describe("Windows NSIS Claude hook uninstall cleanup", () => {
     assert.match(script, /New-Object System\.Text\.UTF8Encoding -ArgumentList \$false/);
     assert.match(script, /\.TrimStart\(\[char\]0xFEFF\)\.Trim\(\)/);
     assert.match(script, /\$rawSettings = \$rawSettings\.TrimStart\(\[char\]0xFEFF\)/);
-    assert.match(script, /\[System\.IO\.File\]::ReadAllText\(\$settingsPath, \$Utf8NoBom\)/);
-    assert.match(script, /\[System\.IO\.File\]::WriteAllText\(\$settingsPath, \$json \+ \[Environment\]::NewLine, \$Utf8NoBom\)/);
+    assert.match(script, /\[System\.IO\.File\]::ReadAllText\(\$FilePath, \$Utf8NoBom\)/);
+    assert.match(script, /\[System\.IO\.File\]::WriteAllText\(\$FilePath, \$json \+ \[Environment\]::NewLine, \$Utf8NoBom\)/);
     assert.match(script, /ConvertTo-Json -InputObject \$settings -Depth 100/);
     assert.match(script, /\.PSObject\.Properties/);
     assert.match(script, /\[object\[\]\]\$nextEntries\.ToArray\(\)/);

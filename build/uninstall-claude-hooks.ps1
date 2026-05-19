@@ -5,7 +5,22 @@ param(
 $ErrorActionPreference = "Stop"
 $Utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
 $ClawdPermissionPorts = @(23333, 23334, 23335, 23336, 23337)
-$ClawdCommandMarkers = @("clawd-hook.js", "auto-start.js", "auto-start.sh")
+$ClawdCommandMarkers = @(
+  "clawd-hook.js",
+  "auto-start.js",
+  "auto-start.sh",
+  "codebuddy-hook.js",
+  "gemini-hook.js",
+  "cursor-hook.js",
+  "kiro-hook.js",
+  "kimi-hook.js",
+  "copilot-hook.js",
+  "codex-hook.js",
+  "codex-debug-hook.js",
+  "openclaw-plugin",
+  "opencode-plugin",
+  "hermes-plugin"
+)
 
 function Normalize-PathForCompare {
   param([string]$PathValue)
@@ -177,6 +192,15 @@ function Remove-ClawdHooksFromEntries {
       continue
     }
 
+    # Check bash/powershell fields (Copilot CLI format)
+    $bashCmd = Get-StringPropertyValue $entry "bash"
+    $psCmd = Get-StringPropertyValue $entry "powershell"
+    if ((Test-ClawdCommand $bashCmd) -or (Test-ClawdCommand $psCmd)) {
+      $removed++
+      $changed = $true
+      continue
+    }
+
     $hooksProperty = Get-JsonProperty $entry "hooks"
     if ($null -eq $hooksProperty -or -not ($hooksProperty.Value -is [System.Array])) {
       [void]$nextEntries.Add($entry)
@@ -254,30 +278,206 @@ function Remove-ClawdHooksFromSettings {
   return $changed
 }
 
+function Remove-ClawdFromPluginArray {
+  param([object]$Settings)
+
+  $pluginProperty = Get-JsonProperty $Settings "plugin"
+  if ($null -eq $pluginProperty -or -not ($pluginProperty.Value -is [System.Array])) {
+    return $false
+  }
+
+  $nextPlugins = New-Object System.Collections.ArrayList
+  $changed = $false
+
+  foreach ($entry in $pluginProperty.Value) {
+    if ($entry -is [string] -and (Test-ClawdCommand $entry)) {
+      $changed = $true
+      continue
+    }
+    [void]$nextPlugins.Add($entry)
+  }
+
+  if ($changed) {
+    $pluginProperty.Value = [object[]]$nextPlugins.ToArray()
+  }
+
+  return $changed
+}
+
+function Remove-ClawdFromKimiToml {
+  param([string]$FilePath)
+
+  if (-not [System.IO.File]::Exists($FilePath)) { return $false }
+
+  $content = [System.IO.File]::ReadAllText($FilePath, $Utf8NoBom)
+  if ([string]::IsNullOrWhiteSpace($content)) { return $false }
+
+  $hasMarker = $false
+  foreach ($marker in $ClawdCommandMarkers) {
+    if ($content.IndexOf($marker, [System.StringComparison]::Ordinal) -ge 0) {
+      $hasMarker = $true
+      break
+    }
+  }
+  if (-not $hasMarker) { return $false }
+
+  # Line-by-line removal of [[hooks]] blocks containing Clawd markers
+  $lines = $content -split "`n"
+  $output = New-Object System.Collections.ArrayList
+  $i = 0
+  $removed = $false
+
+  while ($i -lt $lines.Count) {
+    $line = $lines[$i]
+    if ($line -match '^\s*\[\[hooks\]\]') {
+      $blockStart = $i
+      $j = $i + 1
+      while ($j -lt $lines.Count -and $lines[$j] -notmatch '^\s*\[\[?[^\]]+\]\]?') {
+        $j++
+      }
+      $block = ($lines[$blockStart..($j-1)]) -join "`n"
+      $blockHasMarker = $false
+      foreach ($marker in $ClawdCommandMarkers) {
+        if ($block.IndexOf($marker, [System.StringComparison]::Ordinal) -ge 0) {
+          $blockHasMarker = $true
+          break
+        }
+      }
+      if ($blockHasMarker) {
+        $removed = $true
+      } else {
+        for ($k = $blockStart; $k -lt $j; $k++) {
+          [void]$output.Add($lines[$k])
+        }
+      }
+      $i = $j
+    } else {
+      [void]$output.Add($line)
+      $i++
+    }
+  }
+
+  if ($removed) {
+    $newContent = ($output.ToArray() -join "`n") -replace "(`n){3,}", "`n`n"
+    $newContent = $newContent.TrimEnd() + "`n"
+    [System.IO.File]::WriteAllText($FilePath, $newContent, $Utf8NoBom)
+  }
+
+  return $removed
+}
+
+function Remove-ClawdFromKiroAgents {
+  param([string]$AgentsDir)
+
+  if (-not [System.IO.Directory]::Exists($AgentsDir)) { return $false }
+
+  $changed = $false
+  $jsonFiles = Get-ChildItem -Path $AgentsDir -Filter "*.json" -File -ErrorAction SilentlyContinue
+
+  foreach ($file in $jsonFiles) {
+    try {
+      $raw = [System.IO.File]::ReadAllText($file.FullName, $Utf8NoBom)
+      $settings = ConvertFrom-Json -InputObject $raw
+      if ($null -eq $settings) { continue }
+
+      if (Remove-ClawdHooksFromSettings $settings) {
+        $json = ConvertTo-Json -InputObject $settings -Depth 100
+        [System.IO.File]::WriteAllText($file.FullName, $json + [Environment]::NewLine, $Utf8NoBom)
+        $changed = $true
+      }
+    } catch {
+      continue
+    }
+  }
+
+  return $changed
+}
+
+function Process-JsonSettingsFile {
+  param(
+    [string]$FilePath,
+    [string]$AgentName,
+    [switch]$IsPluginArray
+  )
+
+  if (-not [System.IO.File]::Exists($FilePath)) { return }
+
+  try {
+    $rawSettings = [System.IO.File]::ReadAllText($FilePath, $Utf8NoBom)
+    $rawSettings = $rawSettings.TrimStart([char]0xFEFF)
+    $settings = ConvertFrom-Json -InputObject $rawSettings
+    if ($null -eq $settings) { return }
+
+    $changed = $false
+    if ($IsPluginArray) {
+      $changed = Remove-ClawdFromPluginArray $settings
+    } else {
+      $changed = Remove-ClawdHooksFromSettings $settings
+    }
+
+    if (-not $changed) { return }
+
+    $backupName = "{0}.clawd-uninstall-{1}.bak" -f (Split-Path -Leaf $FilePath), (Get-Date -Format "yyyyMMdd-HHmmss-fff")
+    $backupPath = Join-Path (Split-Path -Parent $FilePath) $backupName
+    [System.IO.File]::Copy($FilePath, $backupPath, $false)
+
+    $json = ConvertTo-Json -InputObject $settings -Depth 100
+    [System.IO.File]::WriteAllText($FilePath, $json + [Environment]::NewLine, $Utf8NoBom)
+  } catch {
+  }
+}
+
 try {
   $userHome = Resolve-TargetUserHome
   if ([string]::IsNullOrWhiteSpace($userHome)) { exit 0 }
 
-  $settingsPath = Join-Path (Join-Path $userHome ".claude") "settings.json"
-  if (-not [System.IO.File]::Exists($settingsPath)) { exit 0 }
+  # --- Claude Code ---
+  Process-JsonSettingsFile -FilePath (Join-Path (Join-Path $userHome ".claude") "settings.json") -AgentName "Claude"
 
-  $rawSettings = [System.IO.File]::ReadAllText($settingsPath, $Utf8NoBom)
-  $rawSettings = $rawSettings.TrimStart([char]0xFEFF)
-  try {
-    $settings = ConvertFrom-Json -InputObject $rawSettings
-  } catch {
-    exit 0
-  }
+  # --- CodeBuddy ---
+  Process-JsonSettingsFile -FilePath (Join-Path (Join-Path $userHome ".codebuddy") "settings.json") -AgentName "CodeBuddy"
 
-  if ($null -eq $settings) { exit 0 }
-  if (-not (Remove-ClawdHooksFromSettings $settings)) { exit 0 }
+  # --- Gemini CLI ---
+  Process-JsonSettingsFile -FilePath (Join-Path (Join-Path $userHome ".gemini") "settings.json") -AgentName "Gemini"
 
-  $backupName = "settings.json.clawd-uninstall-{0}.bak" -f (Get-Date -Format "yyyyMMdd-HHmmss-fff")
-  $backupPath = Join-Path (Split-Path -Parent $settingsPath) $backupName
-  [System.IO.File]::Copy($settingsPath, $backupPath, $false)
+  # --- Cursor Agent ---
+  Process-JsonSettingsFile -FilePath (Join-Path (Join-Path $userHome ".cursor") "hooks.json") -AgentName "Cursor"
 
-  $json = ConvertTo-Json -InputObject $settings -Depth 100
-  [System.IO.File]::WriteAllText($settingsPath, $json + [Environment]::NewLine, $Utf8NoBom)
+  # --- Copilot CLI ---
+  $copilotHooksPath = Join-Path $userHome ".copilot"
+  $copilotHooksPath = Join-Path $copilotHooksPath "hooks"
+  $copilotHooksPath = Join-Path $copilotHooksPath "hooks.json"
+  Process-JsonSettingsFile -FilePath $copilotHooksPath -AgentName "Copilot"
+
+  # --- Codex CLI ---
+  Process-JsonSettingsFile -FilePath (Join-Path (Join-Path $userHome ".codex") "hooks.json") -AgentName "Codex"
+
+  # --- Kiro CLI (per-agent JSON files) ---
+  $kiroAgentsDir = Join-Path (Join-Path $userHome ".kiro") "agents"
+  Remove-ClawdFromKiroAgents -AgentsDir $kiroAgentsDir
+
+  # --- Kimi CLI (TOML) ---
+  $kimiConfigPath = Join-Path (Join-Path $userHome ".kimi") "config.toml"
+  Remove-ClawdFromKimiToml -FilePath $kimiConfigPath
+
+  # --- OpenCode (plugin array) ---
+  $opencodeConfigPath = Join-Path $userHome ".config"
+  $opencodeConfigPath = Join-Path $opencodeConfigPath "opencode"
+  $opencodeConfigPath = Join-Path $opencodeConfigPath "opencode.json"
+  Process-JsonSettingsFile -FilePath $opencodeConfigPath -AgentName "OpenCode" -IsPluginArray
+
+  # --- OpenClaw (plugin registration in ~/.openclaw/) ---
+  $openclawConfigPath = Join-Path (Join-Path $userHome ".openclaw") "plugins.json"
+  Process-JsonSettingsFile -FilePath $openclawConfigPath -AgentName "OpenClaw" -IsPluginArray
+
+  # --- Hermes (plugin registration) ---
+  $hermesConfigPath = Join-Path (Join-Path $userHome ".hermes") "plugins.json"
+  Process-JsonSettingsFile -FilePath $hermesConfigPath -AgentName "Hermes" -IsPluginArray
+
+  # --- Pi Extension ---
+  $piConfigPath = Join-Path (Join-Path $userHome ".pi") "extensions.json"
+  Process-JsonSettingsFile -FilePath $piConfigPath -AgentName "Pi" -IsPluginArray
+
   exit 0
 } catch {
   exit 0

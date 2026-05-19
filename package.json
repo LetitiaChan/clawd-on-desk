@@ -44,6 +44,14 @@
     "uninstall:codex-debug-hooks": "node hooks/codex-debug-install.js --uninstall",
     "install:hermes-plugin": "node hooks/hermes-install.js",
     "uninstall:hermes-plugin": "node hooks/hermes-install.js --uninstall",
+    "uninstall:all-hooks": "node hooks/uninstall.js all-agents",
+    "uninstall:codebuddy-hooks": "node hooks/codebuddy-install.js --uninstall",
+    "uninstall:gemini-hooks": "node hooks/gemini-install.js --uninstall",
+    "uninstall:cursor-hooks": "node hooks/cursor-install.js --uninstall",
+    "uninstall:kiro-hooks": "node hooks/kiro-install.js --uninstall",
+    "uninstall:kimi-hooks": "node hooks/kimi-install.js --uninstall",
+    "uninstall:copilot-hooks": "node hooks/copilot-install.js --uninstall",
+    "uninstall:opencode-plugin": "node hooks/opencode-install.js --uninstall",
     "register-protocol:dev": "node launch.js --register-protocol"
   },
   "keywords": [
@@ -114,6 +122,9 @@
           ]
         }
       ]
+    },
+    "deb": {
+      "afterRemove": "build/linux-after-remove.sh"
     },
     "nsis": {
       "oneClick": false,

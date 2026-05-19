@@ -173,6 +173,58 @@ function registerCopilotHooks(options = {}) {
   return { added, updated, skipped, configChanged: changed };
 }
 
+/**
+ * Unregister all Clawd hooks from ~/.copilot/hooks/hooks.json
+ * @param {object} [options]
+ * @param {string} [options.hooksPath]
+ * @param {string} [options.homeDir]
+ * @returns {{ removed: number, changed: boolean }}
+ */
+function unregisterCopilotHooks(options = {}) {
+  const homeDir = options.homeDir || os.homedir();
+  const hooksPath = options.hooksPath || path.join(homeDir, ".copilot", "hooks", "hooks.json");
+  let settings = {};
+  try {
+    settings = JSON.parse(fs.readFileSync(hooksPath, "utf-8"));
+  } catch (err) {
+    if (err.code === "ENOENT") return { removed: 0, changed: false };
+    throw new Error(`Failed to read hooks.json: ${err.message}`);
+  }
+
+  if (!settings.hooks || typeof settings.hooks !== "object") {
+    return { removed: 0, changed: false };
+  }
+
+  let removed = 0;
+  let changed = false;
+
+  for (const [event, entries] of Object.entries(settings.hooks)) {
+    if (!Array.isArray(entries)) continue;
+
+    const nextEntries = [];
+    for (const entry of entries) {
+      if (entryHasMarker(entry)) {
+        removed++;
+        changed = true;
+        continue;
+      }
+      nextEntries.push(entry);
+    }
+
+    if (nextEntries.length > 0) {
+      settings.hooks[event] = nextEntries;
+    } else {
+      delete settings.hooks[event];
+    }
+  }
+
+  if (changed) {
+    writeJsonAtomic(hooksPath, settings);
+  }
+
+  return { removed, changed };
+}
+
 module.exports = {
   DEFAULT_PARENT_DIR,
   DEFAULT_CONFIG_PATH,
@@ -181,12 +233,18 @@ module.exports = {
   buildCopilotHookCommands,
   buildCopilotHookEntry,
   registerCopilotHooks,
+  unregisterCopilotHooks,
 };
 
-// CLI: `node hooks/copilot-install.js [--remote]`.
+// CLI: `node hooks/copilot-install.js [--remote] [--uninstall]`.
 if (require.main === module) {
   try {
-    registerCopilotHooks({ remote: process.argv.includes("--remote") });
+    if (process.argv.includes("--uninstall")) {
+      const { removed, changed } = unregisterCopilotHooks({});
+      console.log(`Clawd Copilot hooks uninstall: removed=${removed}, changed=${changed}`);
+    } else {
+      registerCopilotHooks({ remote: process.argv.includes("--remote") });
+    }
   } catch (err) {
     console.error(err.message);
     process.exit(1);

@@ -246,17 +246,111 @@ function registerGeminiHooks(options = {}) {
   return { added, skipped, updated };
 }
 
+/**
+ * Unregister all Clawd hooks from ~/.gemini/settings.json
+ * @param {object} [options]
+ * @param {string} [options.settingsPath]
+ * @param {string} [options.homeDir]
+ * @returns {{ removed: number, changed: boolean }}
+ */
+function unregisterGeminiHooks(options = {}) {
+  const homeDir = options.homeDir || os.homedir();
+  const settingsPath = options.settingsPath || path.join(homeDir, ".gemini", "settings.json");
+  let settings = {};
+  try {
+    settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+  } catch (err) {
+    if (err.code === "ENOENT") return { removed: 0, changed: false };
+    throw new Error(`Failed to read settings.json: ${err.message}`);
+  }
+
+  if (!settings.hooks || typeof settings.hooks !== "object") {
+    return { removed: 0, changed: false };
+  }
+
+  let removed = 0;
+  let changed = false;
+
+  for (const [event, entries] of Object.entries(settings.hooks)) {
+    if (!Array.isArray(entries)) continue;
+
+    const nextEntries = [];
+    for (const entry of entries) {
+      if (!entry || typeof entry !== "object") { nextEntries.push(entry); continue; }
+
+      // Check flat command format
+      if (isClawdHookCommand(entry.command)) {
+        removed++;
+        changed = true;
+        continue;
+      }
+
+      // Check nested hooks array
+      if (Array.isArray(entry.hooks)) {
+        const nextHooks = [];
+        for (const h of entry.hooks) {
+          if (h && isClawdHookCommand(h.command)) {
+            removed++;
+            changed = true;
+          } else {
+            nextHooks.push(h);
+          }
+        }
+        if (nextHooks.length > 0) {
+          entry.hooks = nextHooks;
+          nextEntries.push(entry);
+        } else {
+          changed = true;
+        }
+        continue;
+      }
+
+      nextEntries.push(entry);
+    }
+
+    if (nextEntries.length > 0) {
+      settings.hooks[event] = nextEntries;
+    } else {
+      delete settings.hooks[event];
+    }
+  }
+
+  // Also clean up hooksConfig.disabled entries referencing Clawd
+  if (settings.hooksConfig && typeof settings.hooksConfig === "object" && Array.isArray(settings.hooksConfig.disabled)) {
+    const nextDisabled = settings.hooksConfig.disabled.filter((entry) => {
+      if (entry === "clawd" || isClawdHookCommand(entry)) {
+        changed = true;
+        return false;
+      }
+      return true;
+    });
+    settings.hooksConfig.disabled = nextDisabled;
+  }
+
+  if (changed) {
+    writeJsonAtomic(settingsPath, settings);
+  }
+
+  return { removed, changed };
+}
+
 module.exports = {
   DEFAULT_PARENT_DIR,
   DEFAULT_CONFIG_PATH,
   registerGeminiHooks,
+  unregisterGeminiHooks,
   GEMINI_HOOK_EVENTS,
   __test: { buildGeminiHookCommand },
 };
 
 if (require.main === module) {
   try {
-    registerGeminiHooks({});
+    if (process.argv.includes("--uninstall")) {
+      const { removed, changed } = unregisterGeminiHooks({});
+      console.log(`Clawd Gemini hooks uninstall: removed=${removed}, changed=${changed}`);
+    } else {
+      registerGeminiHooks({});
+    }
   } catch (err) {
     console.error(err.message);
     process.exit(1);

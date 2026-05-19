@@ -137,17 +137,76 @@ function registerCursorHooks(options = {}) {
   return { added, skipped, updated };
 }
 
+/**
+ * Unregister all Clawd hooks from ~/.cursor/hooks.json
+ * @param {object} [options]
+ * @param {string} [options.hooksPath]
+ * @param {string} [options.homeDir]
+ * @returns {{ removed: number, changed: boolean }}
+ */
+function unregisterCursorHooks(options = {}) {
+  const homeDir = options.homeDir || os.homedir();
+  const hooksPath = options.hooksPath || path.join(homeDir, ".cursor", "hooks.json");
+  let settings = {};
+  try {
+    settings = JSON.parse(fs.readFileSync(hooksPath, "utf-8"));
+  } catch (err) {
+    if (err.code === "ENOENT") return { removed: 0, changed: false };
+    throw new Error(`Failed to read hooks.json: ${err.message}`);
+  }
+
+  if (!settings.hooks || typeof settings.hooks !== "object") {
+    return { removed: 0, changed: false };
+  }
+
+  let removed = 0;
+  let changed = false;
+
+  for (const [event, entries] of Object.entries(settings.hooks)) {
+    if (!Array.isArray(entries)) continue;
+
+    const nextEntries = [];
+    for (const entry of entries) {
+      if (!entry || typeof entry !== "object") { nextEntries.push(entry); continue; }
+      if (typeof entry.command === "string" && entry.command.includes(MARKER)) {
+        removed++;
+        changed = true;
+        continue;
+      }
+      nextEntries.push(entry);
+    }
+
+    if (nextEntries.length > 0) {
+      settings.hooks[event] = nextEntries;
+    } else {
+      delete settings.hooks[event];
+    }
+  }
+
+  if (changed) {
+    writeJsonAtomic(hooksPath, settings);
+  }
+
+  return { removed, changed };
+}
+
 module.exports = {
   DEFAULT_PARENT_DIR,
   DEFAULT_CONFIG_PATH,
   registerCursorHooks,
+  unregisterCursorHooks,
   CURSOR_HOOK_EVENTS,
   buildCursorHookCommand,
 };
 
 if (require.main === module) {
   try {
-    registerCursorHooks({});
+    if (process.argv.includes("--uninstall")) {
+      const { removed, changed } = unregisterCursorHooks({});
+      console.log(`Clawd Cursor hooks uninstall: removed=${removed}, changed=${changed}`);
+    } else {
+      registerCursorHooks({});
+    }
   } catch (err) {
     console.error(err.message);
     process.exit(1);

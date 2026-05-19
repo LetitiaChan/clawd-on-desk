@@ -340,10 +340,99 @@ function registerKiroHooks(options = {}) {
   return { added: totalAdded, skipped: totalSkipped, updated: totalUpdated, files };
 }
 
+/**
+ * Unregister all Clawd hooks from Kiro agent configs under ~/.kiro/agents/
+ * @param {object} [options]
+ * @param {string} [options.homeDir]
+ * @param {string} [options.agentsDir]
+ * @param {boolean} [options.silent]
+ * @param {boolean} [options.removeClawdAgent] if true, delete clawd.json entirely (default: false)
+ * @returns {{ removed: number, changed: boolean, files: string[] }}
+ */
+function unregisterKiroHooks(options = {}) {
+  const homeDir = options.homeDir || os.homedir();
+  const agentsDir = options.agentsDir || path.join(homeDir, ".kiro", "agents");
+
+  if (!fs.existsSync(agentsDir)) {
+    return { removed: 0, changed: false, files: [] };
+  }
+
+  let totalRemoved = 0;
+  let changed = false;
+  const files = [];
+
+  let entries;
+  try {
+    entries = fs.readdirSync(agentsDir);
+  } catch {
+    return { removed: 0, changed: false, files: [] };
+  }
+
+  const jsonFiles = entries.filter(f => f.endsWith(".json"));
+
+  for (const file of jsonFiles) {
+    const filePath = path.join(agentsDir, file);
+
+    // Optionally remove the dedicated clawd agent entirely
+    if (options.removeClawdAgent && file === `${CLAWD_AGENT_NAME}.json`) {
+      try {
+        fs.unlinkSync(filePath);
+        changed = true;
+        files.push(file);
+      } catch {}
+      continue;
+    }
+
+    let settings;
+    try {
+      settings = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    } catch {
+      continue;
+    }
+
+    if (!settings.hooks || typeof settings.hooks !== "object") continue;
+
+    let fileChanged = false;
+    for (const [event, eventEntries] of Object.entries(settings.hooks)) {
+      if (!Array.isArray(eventEntries)) continue;
+
+      const nextEntries = [];
+      for (const entry of eventEntries) {
+        if (!entry || typeof entry !== "object") { nextEntries.push(entry); continue; }
+        if (typeof entry.command === "string" && entry.command.includes(MARKER)) {
+          totalRemoved++;
+          fileChanged = true;
+          continue;
+        }
+        nextEntries.push(entry);
+      }
+
+      if (nextEntries.length > 0) {
+        settings.hooks[event] = nextEntries;
+      } else {
+        delete settings.hooks[event];
+      }
+    }
+
+    if (fileChanged) {
+      changed = true;
+      files.push(file);
+      writeJsonAtomic(filePath, settings);
+    }
+  }
+
+  if (!options.silent && changed) {
+    console.log(`Clawd: removed Kiro hooks from ${files.length} file(s): ${files.join(", ")}`);
+  }
+
+  return { removed: totalRemoved, changed, files };
+}
+
 module.exports = {
   DEFAULT_PARENT_DIR,
   DEFAULT_AGENTS_DIR,
   registerKiroHooks,
+  unregisterKiroHooks,
   KIRO_HOOK_EVENTS,
   __test: {
     formatHookCommand,
@@ -356,7 +445,12 @@ module.exports = {
 
 if (require.main === module) {
   try {
-    registerKiroHooks({});
+    if (process.argv.includes("--uninstall")) {
+      const { removed, changed } = unregisterKiroHooks({});
+      console.log(`Clawd Kiro hooks uninstall: removed=${removed}, changed=${changed}`);
+    } else {
+      registerKiroHooks({});
+    }
   } catch (err) {
     console.error(err.message);
     process.exit(1);

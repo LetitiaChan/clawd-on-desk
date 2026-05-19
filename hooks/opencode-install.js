@@ -133,16 +133,64 @@ function registerOpencodePlugin(options = {}) {
   return { added, skipped, created, configPath, pluginDir };
 }
 
+/**
+ * Unregister the Clawd opencode plugin from ~/.config/opencode/opencode.json.
+ *
+ * @param {object} [options]
+ * @param {boolean} [options.silent]
+ * @param {string}  [options.configPath]
+ * @returns {{ removed: boolean, changed: boolean }}
+ */
+function unregisterOpencodePlugin(options = {}) {
+  const configPath = options.configPath || DEFAULT_CONFIG_PATH;
+  let settings = {};
+  try {
+    settings = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+  } catch (err) {
+    if (err.code === "ENOENT") return { removed: false, changed: false };
+    throw new Error(`Failed to read ${configPath}: ${err.message}`);
+  }
+
+  if (!Array.isArray(settings.plugin)) {
+    return { removed: false, changed: false };
+  }
+
+  const before = settings.plugin.length;
+  settings.plugin = settings.plugin.filter((entry) => {
+    if (typeof entry !== "string") return true;
+    if (entry.includes(PLUGIN_DIR_NAME)) return false;
+    return true;
+  });
+
+  if (settings.plugin.length === before) {
+    return { removed: false, changed: false };
+  }
+
+  writeJsonAtomic(configPath, settings);
+
+  if (!options.silent) {
+    console.log(`Clawd opencode plugin unregistered from ${configPath}`);
+  }
+
+  return { removed: true, changed: true };
+}
+
 module.exports = {
   DEFAULT_PARENT_DIR,
   DEFAULT_CONFIG_PATH,
   registerOpencodePlugin,
+  unregisterOpencodePlugin,
   resolvePluginDir,
 };
 
 if (require.main === module) {
   try {
-    registerOpencodePlugin({});
+    if (process.argv.includes("--uninstall")) {
+      const { removed, changed } = unregisterOpencodePlugin({});
+      console.log(`Clawd opencode plugin uninstall: removed=${removed}, changed=${changed}`);
+    } else {
+      registerOpencodePlugin({});
+    }
   } catch (err) {
     console.error(err.message);
     process.exit(1);
