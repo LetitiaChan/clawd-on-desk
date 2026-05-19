@@ -135,6 +135,18 @@ For normal use, download the latest prebuilt installer from **[GitHub Releases](
 
 Launch Clawd after installing it; supported agent hooks/plugins are synced automatically on startup.
 
+### Requirements
+
+| What you need | Prebuilt installer | Run from source |
+| --- | --- | --- |
+| **Node.js 18+** on `PATH` | ✅ Required — Clawd's agent hooks (Claude Code, CodeBuddy, Kiro, opencode, Pi, …) all spawn `node` to forward events. Without Node, hooks throw `ENOENT` and Clawd falls back to log polling (limited fidelity, no permission bubbles). | ✅ Required to install dependencies and run Electron. |
+| **Claude Code CLI** ([install guide](https://docs.claude.com/en/docs/claude-code/quickstart)) | Optional — only needed if you want Clawd to integrate with Claude Code. Other agents (Codex CLI, Copilot CLI, Gemini CLI, …) work independently. | Optional, same as installer. |
+| **git** | Not required for installer use. | Required to clone the repo. |
+
+> **Why Node.js even with the installer?** Clawd ships an Electron-bundled Node runtime for the app itself, but agent hook scripts (e.g. `~/.claude/hooks/clawd-state.js`) are spawned as **standalone Node processes** by each agent's CLI. They need a `node` binary that the spawning agent can locate on `PATH`. Install Node 18 LTS or newer from [nodejs.org](https://nodejs.org/) (or via `nvm` / `volta`) before launching Clawd.
+>
+> If you launch Clawd without Node on `PATH`, you'll see a yellow banner at the top of `Settings…` → `General` with a one-click link to fix it.
+
 Run from source only if you're contributing, testing unreleased code, or debugging integrations. Source installs download Electron/build tooling and can create a large `node_modules` tree.
 
 ```bash
