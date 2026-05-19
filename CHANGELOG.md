@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.7.14] - 2026-05-19
+
+> Tag: `v0.7.14` · Release notes: [`docs/releases/release-v0.7.14.md`](docs/releases/release-v0.7.14.md)
+
 ### Added
 - **Node.js install guidance in wizard and doctor modal.** When `node` is not detected on the system, the Gongfeng Copilot wizard now renders a dedicated step ⓪ (before the Bash step ①) with per-platform install commands: Windows (`winget install OpenJS.NodeJS.LTS` + msi download + nvm-windows/Volta/Scoop/Chocolatey), macOS (`brew install node@20` + nvm/Volta), Linux (`apt`/`dnf`/`pacman` + NodeSource + nvm/Volta). The wizard meta-info also shows Node detection status (✅ / ⚠️). The Settings → Doctor modal's Node.js check now displays inline install commands for all three platforms when Node is missing, in all 5 UI locales. The abandoned "bundled Node" approach (`scripts/fetch-node-portable.js`, never committed) has been removed.
 - **10 new test cases** (`test/gongfeng-copilot-node-guide.test.js`): covers `_detectNodeAvailability`, `_renderNodeSection` per-platform rendering, and wizard integration.
@@ -18,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **CLI `tools/gongfeng-wizard.js` summary printed misleading bare `node` instead of the real Node.js path.** The summary block previously read `result.node_bin` directly, which on Windows is the literal string `"node"` by `resolveNodeBin()`'s contract (the wizard relies on PATH lookup, not an absolute path). Users running the CLI saw `- Node 路径: node` and reasonably concluded Clawd had not detected their Node.js install — even though the generated HTML wizard's meta-info already showed the correct absolute path (e.g. `C:\Program Files\nodejs\node.exe ✅`) via `_detectNodeAvailability()`. The CLI summary now calls the same detector so both surfaces agree, and falls back to an explicit "⚠️ 未检测到 — 详见生成的 HTML 中的「⓪ 安装 Node.js」步骤" message when Node is genuinely missing.
 - **Wizard HTML `meta-info` Node line had a dead-code fallback to `result.node_bin`** (the win32 sentinel `"node"`). The fallback chain was `nodeStatus.nodePath || result.node_bin || '(default)'` but `nodeStatus.available === true` already guarantees `nodeStatus.nodePath` is a real absolute path on every platform — the `|| result.node_bin` arm could only be reached as a future-maintenance trap that would silently re-introduce the bare-`"node"` rendering. Simplified to `nodeStatus.nodePath || '(detected)'`. Pinned with a new regression test in `test/gongfeng-copilot-node-guide.test.js` ("meta-info Node path must be an absolute path, not the bare literal 'node'") so the trap cannot reappear.
+
+### Test Results
+- `npm test` — **2657 passed / 0 failed / 5 skipped** (340 suites, 21.5 s)
+- `npm run check:syntax` — ✅ 398 files, 13 require entries
 
 ---
 
@@ -158,7 +168,8 @@ The following versions predate this fork's divergence point and were tagged on t
 - **Pure internal documentation changes** (rules, progress notes, etc.) may skip CHANGELOG updates.
 - **No local packaging.** Per `project-continuity` rule §header, `electron-builder` and platform installer artifacts are produced **only** by `.github/workflows/build.yml` on tag push; never attach a locally-built installer to a GitHub Release. Local work stops at `npm test` + commit + push.
 
-[Unreleased]: https://github.com/LetitiaChan/clawd-on-desk/compare/v0.7.13...HEAD
+[Unreleased]: https://github.com/LetitiaChan/clawd-on-desk/compare/v0.7.14...HEAD
+[0.7.14]: https://github.com/LetitiaChan/clawd-on-desk/compare/v0.7.13...v0.7.14
 [0.7.13]: https://github.com/LetitiaChan/clawd-on-desk/compare/v0.7.12...v0.7.13
 [0.7.12]: https://github.com/LetitiaChan/clawd-on-desk/releases/tag/v0.7.12
 [0.7.11]: https://github.com/LetitiaChan/clawd-on-desk/releases/tag/v0.7.11
