@@ -206,15 +206,17 @@ describe("package build config", () => {
       assert.ok(releaseGateIndex < bodyPathIndex, "release job gate should run before release publication");
     });
 
-    it("creates tag releases as drafts for final asset inspection", () => {
+    it("publishes tag releases immediately so update checks work", () => {
       const workflow = fs.readFileSync(path.join(ROOT, ".github", "workflows", "build.yml"), "utf8");
       const releaseIndex = findWorkflowJobIndex(workflow, "release");
       assert.ok(releaseIndex >= 0, "workflow should define a release job");
       const actionIndex = workflow.indexOf("softprops/action-gh-release@v2", releaseIndex);
-      const draftIndex = workflow.indexOf("draft: true", actionIndex);
+      const draftFalseIndex = workflow.indexOf("draft: false", actionIndex);
+      const draftTrueIndex = workflow.indexOf("draft: true", actionIndex);
       const prereleaseIndex = workflow.indexOf("prerelease: ${{ contains(github.ref_name, '-') }}", actionIndex);
       assert.ok(actionIndex >= 0, "release job should use the GitHub release action");
-      assert.ok(draftIndex > actionIndex, "tag releases should be created as drafts first");
+      assert.ok(draftFalseIndex > actionIndex, "tag releases should be published immediately (draft: false)");
+      assert.strictEqual(draftTrueIndex, -1, "draft: true must not appear — it blocks update detection via /releases/latest API");
       assert.ok(prereleaseIndex > actionIndex, "hyphenated tags should be marked prerelease");
     });
   });

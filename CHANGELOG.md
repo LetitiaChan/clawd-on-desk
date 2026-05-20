@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Update check falsely reports "up to date" when a new release exists.** The CI workflow (`build.yml`) created GitHub Releases as `draft: true`, which meant the GitHub API `/releases/latest` endpoint never returned the new version. The app's `updater.js` calls this endpoint first and short-circuits with "already up to date" when the returned version ≤ current — so users on older versions could never discover the update. Changed `draft: true` → `draft: false` so releases are published immediately upon CI completion, making them visible to the update checker.
+
 ---
 
 ## [0.7.14] - 2026-05-19
