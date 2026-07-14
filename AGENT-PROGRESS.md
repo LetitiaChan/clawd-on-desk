@@ -3,8 +3,8 @@
 > 本文件由 `.codebuddy/rules/project-continuity.mdc` 强制约束维护。
 > 每次会话启动时 Agent 会读取本文件恢复上下文；会话结束/完成重要里程碑时主动更新。
 >
-> **最后更新**：2026-07-14 15:58（commit `5185e57`：ci: add rule consistency check (npm run check:rules) to CI pipeline）
-> **当前 HEAD**：`5185e57` (branch: `main`，已 push)
+> **最后更新**：2026-07-14 18:30（commit `a5f4dea`：fix(codebuddy): route permission approval through PreToolUse.requires_approval）
+> **当前 HEAD**：`a5f4dea` (branch: `main`，待 push)
 > **package.json 版本**：`0.7.14`（已发版；后续改动进 `[Unreleased]`）
 > ⚠️ **构建约定**：本地不打包，所有 `electron-builder` 产出由 CI 完成。详见 `.codebuddy/rules/project-continuity.mdc`。
 
@@ -34,18 +34,18 @@ Claude Code、CodeBuddy、Codex、Copilot CLI、Cursor Agent、Gemini CLI、Gong
 
 | Commit | 说明 |
 |--------|------|
-| `5185e57` | ci: add rule consistency check (npm run check:rules) to CI pipeline（**HEAD**） |
+| `a5f4dea` | fix(codebuddy): route permission approval through PreToolUse.requires_approval（**HEAD**） |
+| `eaeea32` | fix(codebuddy): add PermissionRequest command hook fallback + fix terminal focus in IDE |
+| `dcd5ab2` | chore: remove CLAUDE.md (superseded by .codebuddy/rules) |
+| `d80dae4` | docs: update AGENT-PROGRESS.md — mark rule consistency CI integration complete |
+| `5185e57` | ci: add rule consistency check (npm run check:rules) to CI pipeline |
 | `db28db0` | docs: mark build.yml matrix refactor as already completed in AGENT-PROGRESS |
 | `7c935cd` | docs: update AGENT-PROGRESS.md — mark release-template governance complete |
 | `3fe0825` | docs: enhance release-template.md with detailed fill-in guidance and alignment to release rules |
 | `520ee15` | chore: establish .review/ directory for code review record archival |
 | `17510a1` | docs: update AGENT-PROGRESS.md — mark review archival governance complete |
-| `7be2872` | chore: track AGENT-PROGRESS.md and .codebuddy/ in version control |
-| `494026c` | fix(ci): use PAT for sync-upstream to allow pushing branches with workflow file changes |
-| `483d61c` | fix(updater): publish releases immediately so update check works |
-| `ae4f496` | release: v0.7.14 |
 
-> 主线：Gongfeng Copilot 支持 + fork 自动化发布 + ci.yml 远端兜底流水线。
+> 主线：CodeBuddy 权限审批修正（PreToolUse.requires_approval）+ Gongfeng Copilot 支持 + fork 自动化发布 + ci.yml 远端兜底流水线。
 
 ---
 
@@ -116,6 +116,10 @@ clawd-on-desk/
 15. **不变式测试区分结构性 vs 内容性**：结构可锁死，内容只锁到领域语义级。
 16. **探测类代码三原则**：多重冗余 + 永不静默吞错 + 诊断面板。
 17. **`.review/` 目录的 .gitignore 策略**：自动生成的 `*_record.md`（CodeBuddy 产出）继续被忽略；手动创建的 `README.md`、`TEMPLATE.md`、`review-*.md` 通过豁免规则纳入版本库。
+18. **CodeBuddy IDE 没有 `PermissionRequest` 事件**（仅 7 个事件：SessionStart/SessionEnd/PreToolUse/PostToolUse/UserPromptSubmit/Stop/PreCompact）。
+    - **坑**：给 `PermissionRequest` 注册 command / HTTP hook 是死配置，IDE 永不触发；`PreToolUse` 若返回旧格式 `{"decision":"allow"}`，IDE 解析为 `permissionDecision=none` → `source=default_allow` 直接放行，Clawd 气泡从不出现。
+    - **根因**：CodeBuddy 权限审批完全由 `PreToolUse` 的 `hookSpecificOutput.permissionDecision`（`allow`/`deny`/`ask`）承担；是否需要用户确认由输入里的 `tool_input.requires_approval`（boolean，可选）表达。
+    - **规避**：`codebuddy-hook.js` 只拦截 `requires_approval===true` 的 `PreToolUse`，阻塞转发 `/permission`（走共享 CC 分支），把 `decision.behavior` 转成 `permissionDecision`；不可达/无决策/DND/禁用一律回退 `ask`（IDE 内置提示），绝不替用户决定。诊断锚点：IDE 日志 `C:\Users\<user>\AppData\Roaming\CodeBuddy CN\logs\...\clawd-on-desk__*.log` 里的 `[HookExecutor]` / `[ToolHookExecutor] PreToolUse hook result` / `[beforeExecute] Permission decision`。
 
 ---
 
