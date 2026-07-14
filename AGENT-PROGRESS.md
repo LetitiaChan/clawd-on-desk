@@ -3,8 +3,8 @@
 > 本文件由 `.codebuddy/rules/project-continuity.mdc` 强制约束维护。
 > 每次会话启动时 Agent 会读取本文件恢复上下文；会话结束/完成重要里程碑时主动更新。
 >
-> **最后更新**：2026-05-20 10:26（commit `483d61c`：fix(updater): publish releases immediately so update check works；ci.yml run 26137489988 ✅）
-> **当前 HEAD**：`483d61c` (branch: `main`，已 push，ci.yml ✅)
+> **最后更新**：2026-07-14 15:45（commit `520ee15`：chore: establish .review/ directory for code review record archival）
+> **当前 HEAD**：`520ee15` (branch: `main`，已 push)
 > **package.json 版本**：`0.7.14`（已发版；后续改动进 `[Unreleased]`）
 > ⚠️ **构建约定**：本地不打包，所有 `electron-builder` 产出由 CI 完成。详见 `.codebuddy/rules/project-continuity.mdc`。
 
@@ -34,16 +34,16 @@ Claude Code、CodeBuddy、Codex、Copilot CLI、Cursor Agent、Gemini CLI、Gong
 
 | Commit | 说明 |
 |--------|------|
-| `483d61c` | fix(updater): publish releases immediately so update check works（**HEAD**） |
+| `520ee15` | chore: establish .review/ directory for code review record archival（**HEAD**） |
+| `7be2872` | chore: track AGENT-PROGRESS.md and .codebuddy/ in version control |
+| `494026c` | fix(ci): use PAT for sync-upstream to allow pushing branches with workflow file changes |
+| `483d61c` | fix(updater): publish releases immediately so update check works |
 | `ae4f496` | release: v0.7.14 |
 | `163f5c3` | fix(node): show real Node.js path in CLI summary |
 | `b3932cb` | test+docs: Node.js install guide tests (10 cases) |
 | `25c89bf` | feat(node): install guidance in wizard and doctor |
 | `b2fb860` | feat(doctor): Node.js availability detection |
 | `5a75aa0` | release: v0.7.13 |
-| `d34c510` | fix(ci): macOS test failure + Linux deb build error |
-| `17aa09b` | --sync-upstream daily |
-| `be4d67c` | fix(gongfeng): packaged exe wizard 误报 + diagnostics 诊断面板 |
 
 > 主线：Gongfeng Copilot 支持 + fork 自动化发布 + ci.yml 远端兜底流水线。
 
@@ -51,13 +51,14 @@ Claude Code、CodeBuddy、Codex、Copilot CLI、Cursor Agent、Gemini CLI、Gong
 
 ## 三、待实施的变更
 
-> 当前本地工作树干净（除 .gitignore 排除的本文件）。无未提交改动。
+> 当前本地工作树干净。`CLAUDE.md` 在工作树中被删除（未暂存），待确认是否需要正式移除。无其他未提交改动。
 
 ---
 
 ## 四、已积累的规格 / 规则
 
 - `.codebuddy/rules/project-continuity.mdc` — 跨会话上下文恢复 + Bug 修复 / 发布 / 其它场景处置
+- `.review/` — 评审记录沉淀（README.md + TEMPLATE.md + review-*.md）
 - `AGENTS.md` — Agents 集成总览
 - `CHANGELOG.md` — Keep a Changelog 风格 + 英文
 - `.github/workflows/` — build.yml / ci.yml / auto-tag.yml / sync-upstream.yml / rebase-feature-gongfeng.yml
@@ -83,6 +84,7 @@ clawd-on-desk/
 ├── build/                  # NSIS 安装脚本
 ├── test/                   # 自研测试
 ├── docs/                   # 文档分区
+├── .review/                # 评审记录沉淀
 ├── .github/workflows/      # CI workflows
 ├── package.json
 ├── launch.js               # 启动入口
@@ -93,7 +95,7 @@ clawd-on-desk/
 
 ## 六、已知问题与注意事项
 
-1. **`.gitignore` 排除了 `AGENT-PROGRESS.md` 与 `.codebuddy/`**（第 105/106 行）。本文件仅本地生效，不在远端。
+1. **~~`.gitignore` 双源问题~~**（✅ 已解决，commit `7be2872`）。`AGENT-PROGRESS.md` 与 `.codebuddy/` 已纳入版本库。
 2. **`v0.7.11` 是孤儿 tag**，不可复用。
 3. **dist/ 是本地构建遗留**，安装包从 CI artifact / Release 页下载。
 4. **package-lock.json（181KB）**必须随依赖变更一起 commit，`npm ci` 依赖它。
@@ -113,14 +115,17 @@ clawd-on-desk/
 14. **工作流断言用语义匹配**（matrix.include 三元组 + 插值变量），不要断 plain-string 命令字面量。
 15. **不变式测试区分结构性 vs 内容性**：结构可锁死，内容只锁到领域语义级。
 16. **探测类代码三原则**：多重冗余 + 永不静默吞错 + 诊断面板。
+17. **`.review/` 目录的 .gitignore 策略**：自动生成的 `*_record.md`（CodeBuddy 产出）继续被忽略；手动创建的 `README.md`、`TEMPLATE.md`、`review-*.md` 通过豁免规则纳入版本库。
 
 ---
 
 ## 七、下次会话建议
 
 1. **🟡 治理**
-   - `.gitignore` 双源问题：是否豁免本文件与 `.codebuddy/` 进库？
-   - 评审记录沉淀、release-template.md 模板。
+   - ~~`.gitignore` 双源问题~~ ✅ 已解决。
+   - ~~评审记录沉淀~~ ✅ 已完成（commit `520ee15`，`.review/` 目录已建立）。
+   - `CLAUDE.md` 已在工作树中被删除，确认是否正式 commit 移除。
+   - release-template.md 模板完善（当前模板已存在但内容简陋）。
 
 2. **🟠 P1 待办**
    - build.yml matrix 化（合并三 job 重复定义）。
