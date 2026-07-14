@@ -111,8 +111,6 @@ scripts/*
 
 # Code review records
 .review/
-.codebuddy/
-AGENT-PROGRESS.md
 todo.md
 
 # Root-level test / verification scratch files

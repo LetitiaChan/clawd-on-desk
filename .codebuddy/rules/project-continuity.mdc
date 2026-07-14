@@ -1,0 +1,247 @@
+---
+description: 每次会话开始时必须执行
+alwaysApply: true
+type: always
+---
+
+> 🤖 读取本文件时输出：`📖 project-continuity`
+
+# Project Continuity — 跨会话上下文恢复 + 开发纪律
+
+> **构建/打包策略（全局约定）**
+>
+> 本项目**禁止在本地执行打包构建**。所有打包工作统一由 GitHub Actions 工作流 `.github/workflows/build.yml` 在 push tag 后完成（Windows / macOS / Linux 三平台并行跑 `npm test` + `electron-builder` + 上传 artifact + 创建 draft Release）。
+>
+> **本地禁止执行（任意一条都视为违规）**：
+> - `npx electron-builder ...`（任何子命令、任何平台、任何 `--publish` 参数）
+> - `npm run build` / `npm run build:win:*` / `npm run build:mac` / `npm run build:linux` / `npm run build:all` —— 这些 script 内部就是 `electron-builder`，本质等同于本地打包
+> - 任何会向 `dist/` 落 installer（NSIS / dmg / AppImage / deb / `latest*.yml`）的命令
+> - 把本地产出的 installer 手动上传到 GitHub Release 页
+>
+> **本地允许执行**：
+> - 源码编辑、`npm install` / `npm ci`、`npm test`（自研 runner，入口 `test/run-tests.js`）
+> - `npm run check:syntax`（一键跑 `node --check` + 关键入口 `require()` 加载性检查，脚本位于 `scripts/check-syntax.js`）
+> - `npm run verify:sidecars`（仅校验 sidecar 二进制 checksum，不调 builder）
+> - `node --check <file>` 源码语法检查
+> - git 操作（commit / push / tag / branch）
+> - `gh workflow run build.yml --ref <branch>` 手工触发 CI（仅当确需在非 tag 状态下验证打包链路）
+>
+> **本地暂不可用**（package.json 中尚未配置）：
+> - `npm run lint` —— 项目目前没有 ESLint/Prettier 配置；如未来引入，再纳入"本地允许执行"清单
+>
+> 任何"本地打包验证一下"的诉求都必须直接转化为：**push 一个临时分支 + `gh workflow run` 触发 CI** 或 **push tag 走正式发版流程** → 看 CI 结果。
+
+---
+
+## 一、会话启动：读取进度笔记
+
+读取仓库根目录下的 `AGENT-PROGRESS.md` 文件。该文件记录了：
+
+- 项目概要（技术栈、定位、构建工具）
+- 已完成的变更
+- 待实施的变更
+- 已积累的规格
+- 项目目录结构要点
+- 已知问题与注意事项
+- 下次会话建议
+
+### 快速定向
+
+在心中建立以下上下文（不需要冗长地播报，但需要内化理解）：
+
+- 上次做到哪里了？
+- 当前项目处于什么阶段？
+- 有什么已知的坑或注意事项？
+
+### 环境确认（每次会话启动时执行）
+
+```bash
+git --no-pager log --oneline -5
+git --no-pager status --short
+```
+
+按以下顺序处置：
+
+1. **如果发现未推送的本地 commit** → 提醒用户，并询问是否需要先 push 或回滚。
+2. **如果发现工作树有未提交修改（unstaged / uncommitted）** → **先停下来**，询问用户：
+   - 这是 WIP 续做？还是要 stash / 丢弃？
+   - 这些改动是否属于同一个特性（决定后续走规则二还是规则三）？
+   - **不要在脏工作树上直接执行规则二/三**，否则 commit 会夹带未声明的改动。
+3. **如果发现 `AGENT-PROGRESS.md` 中未记录的活跃 change** → 自动补充到「待实施的变更」区块，并提醒用户。
+
+---
+
+## 二、Bug 修复流程
+
+修复 Bug 时必须严格按以下顺序执行，每一步都不可跳过：
+
+1. **本地静态校验**（**严禁本地打包**）。**优先**执行一键脚本：
+
+   ```bash
+   npm run check:syntax
+   ```
+
+   该脚本会递归扫描 `src/`、`hooks/`、`agents/`、`tools/`、`scripts/`、`test/`、`launch.js` 下的全部 `*.js` 跑 `node --check`，并对 13 个关键入口（各 `hooks/*-install.js`、sidecar 脚本等）调用 `require()` 验证可加载性。成功输出 `[check:syntax] OK — N files, M require entries.`。
+
+   **部分补充场景**（脚本不覆盖时才手工补）：
+   - `src/main.js` 依赖 `electron`，脚本不走 require 检查（只走 `node --check`）。如重构到出现运行时错误需人工启动实验。
+   - PowerShell 5.x 不支持 `&&` 链式；需手工批量补检时请用 `Get-ChildItem ... | ForEach-Object { node --check $_.FullName }`，或在 pwsh 7+ 下使用 `&&`。
+
+   > ⚠️ 本步失败严禁跳过；任何检出的 SyntaxError / require failure 都必须在进入下一步前修复。以后新增源码目录请同步迭代 `scripts/check-syntax.js` 的 `SCAN_DIRS` / `REQUIRE_ENTRIES`。
+2. **回归测试**：本地执行 `npm test`（自研 runner，入口 `test/run-tests.js`），确认全部通过；不得跳过失败的相关用例。
+3. **测试用例补全**：针对该 Bug 补充对应的测试用例，防止回归（再跑一遍 `npm test` 确认新用例通过）。
+4. **更新 `CHANGELOG.md`**：在当前 `[Unreleased]` 段（或新开一段）追加条目，含问题描述、影响范围、修复方式（issue/PR 号可选）。CHANGELOG 的语言、Keep a Changelog 风格、`Added/Fixed/...` 桶约定见 `CHANGELOG.md` §Conventions，**不得自行改写其语言/格式约定**。
+5. **git 提交并 push**：提交信息需清晰描述修复内容，并 push 到远端。
+6. **CI 验证**（按以下规则执行）：
+   - **不同 workflow 的触发器**：
+     - `.github/workflows/ci.yml` — 触发器 `push: branches: ['**']` + `pull_request: branches: [main]`（paths-ignore 已豁免纯文档路径）。跑 `npm ci` + `npm run check:syntax` + `npm test`（Linux + Windows matrix）。这是 Bug 修复链路的远端兑底主力。
+     - `.github/workflows/build.yml` — 触发器 `push: tags: ['v*']` + `workflow_dispatch`；**普通 commit push 不会触发**（除非 push 中含了 `package.json` 版本 bump—`auto-tag.yml` 会自动补 tag 进而触发，由规则三统一控制）。
+     - `.github/workflows/auto-tag.yml` — 触发器 `push: branches: [main], paths: ['package.json']`；仅当本次 push 变更了 `package.json.version` 且远端 tag 不存在时才会创建 tag。
+     - `.github/workflows/sync-upstream.yml` — 与上游同步。
+   - **必须做**：push 后等待 `ci.yml` 本次运行 ✅；任何 ✗ 均视为修复未完成 → 回到第 1 步。同时核对 `auto-tag.yml` / `sync-upstream.yml` 等其它被本 push 触发的 workflow 是否也都 ✅。
+   - **可选做**（仅当怀疑打包链路本身坏了）：执行 `gh workflow run build.yml --ref <branch>` 手工触发一次 `workflow_dispatch`，并等待结果；若 ✅ → 该 hotfix 视为通过完整 CI 验证；若 ✗ → 视为 Bug 修复未完成，回到第 1 步定位 CI 报错。
+   - **禁止**：通过打 hotfix patch tag（如 `v0.7.12.1`）来变相触发 build.yml；版本节奏由规则三统一管理。
+7. **刷新 `AGENT-PROGRESS.md`**：更新顶部「最后更新」「当前 HEAD」字段，并在「已完成的变更」追加本次 commit；如有新发现的坑，更新「已知问题」。
+8. **Hotfix 报告**：输出 Hotfix 报告，说明问题根因、修复方案、本地测试结果、CI 验证结果（含 run URL / commit SHA）、影响评估。
+
+> ⚠️ 任意一步失败时，必须停下来反馈，不得跳过后续步骤继续推进。
+> ⚠️ **第 1 步严禁本地 `electron-builder` / `npm run build*` / 产 installer**；如怀疑打包链路本身坏了，按第 6 步可选做用 `gh workflow run` 触发 CI，再根据 CI 日志定位。
+
+---
+
+## 三、发布新版本流程
+
+发布新版本时必须严格按以下顺序执行（**全程无本地打包**，打包完全由 CI 完成）：
+
+1. **本地静态校验**：与规则二第 1 步一致，运行 `npm run check:syntax`，确认源码无语法错误且关键模块可加载。
+2. **autotest**：本地执行完整自动化测试套件（`npm test` 全量），确认全部通过；任何失败立即中止。
+3. **版本号、CHANGELOG、release notes（**三者必须同时就绪后再 commit**）**：
+   - bump `package.json` 的 `version` 字段。
+   - 在 `CHANGELOG.md` 关闭 `[Unreleased]` 段、写入新的 `[x.y.z] - YYYY-MM-DD` 段（语言 = 英文，桶分类遵循 `CHANGELOG.md` §Conventions）。
+   - 在 `docs/releases/` 下补一份 `release-v<x.y.z>.md`。**此文件必须存在**，否则 CI 会创建一个空 body 的 draft Release（`build.yml` 中 `fail_on_unmatched_files: false` + `body_path` 缺失时不会失败，因此规则层面必须自检）。模板参考最近一份 `docs/releases/release-v0.7.12.md` 的章节结构（Added / Fixed / Internal / Test Results / Known Limitations 等）。
+   - 自检：`Test-Path docs/releases/release-v<x.y.z>.md`（PowerShell）确认存在。
+4. **commit**：将 `package.json`、`CHANGELOG.md`、`docs/releases/release-v<x.y.z>.md` 一起作为一个语义清晰的 release commit 提交（建议 `release: v<x.y.z>`）。
+5. **push 并打 tag**：先 `git push` 默认分支（本仓库为 `main`），再 `git tag v<x.y.z>` 并 `git push origin v<x.y.z>`。
+
+   > 事实补充：`auto-tag.yml` 会在 push 到 `main` 且本次提交变更了 `package.json` 时检查远端 tag 是否存在，**如不存在会自动补上 `v<x.y.z>` tag** → 进而触发 `build.yml`。为达到可预测、不依赖隐式行为的发布纪律，**本规则仍要求开发者显式 `git push origin v<x.y.z>`**；如遇到双重触发争抢场景交由 build.yml 的 `concurrency: group=release-${{ github.ref }}` 兜底。
+6. **等待 CI 出包**：在 GitHub Actions 上盯住该 tag 触发的 workflow，确认：
+   - 三个 build job（Windows / macOS / Linux）全部 ✅，每个 job 都执行了 `npm test` + `npm run fetch:sidecars` + `node scripts/verify-sidecar-binaries.js` + `npx electron-builder`。
+   - artifact 全部上传完成（NSIS exe + latest.yml / dmg + latest-mac.yml / AppImage + deb + latest-linux.yml；x64+arm64 视平台覆盖）。
+   - draft GitHub Release 已自动创建并附上 `docs/releases/release-v<x.y.z>.md` 内容（如 release job 提示该文件不存在 → 立即按 ⚠️ 重发流程处理）。
+7. **刷新 `AGENT-PROGRESS.md`**：更新「最后更新」「当前 HEAD」「package.json 版本」、在「已完成的变更」追加 release commit、清空已发布的「待实施的变更」、补「已知问题」（如本次新积累的）。
+8. **报告**：输出发布报告，包含：
+   - 版本号、tag、commit SHA。
+   - 变更摘要（来自 CHANGELOG）。
+   - 本地测试结果 + CI 构建 run URL。
+   - 各平台 artifact 下载链接（来自 draft Release 页）。
+   - 已知限制 / 后续待办。
+
+> ⚠️ 发布流程中任意一步失败 → 立即中止，不得带病发布。
+> ⚠️ **绝不允许"本地打包好后手动上传到 Release 页"** —— 这会绕过 CI 的 checksum / sidecar verify 流程，与上游一致性策略冲突。
+> ⚠️ **tag 重发规则**：
+> - **若 tag 推上后 CI 在第一步就失败、未产出任何 artifact**：允许删除该 tag（`git tag -d v<x.y.z>` + `git push --delete origin v<x.y.z>`）→ 修复 → 重打**同 tag** → 重新触发 CI。
+> - **若 tag 已经触发过 CI 并产出过任何 artifact（哪怕只是 draft Release）**：**禁止复用同 tag**，必须递增到下一个 patch（理由：consumer 端 `latest.yml` 已经引用过该 tag）。被跳过的 tag 应在 `CHANGELOG.md` 中标注 `[SKIPPED — tag orphaned]`（参考 `v0.7.11` 的处理方式）。
+> - 任何情况下都**不得在本地补打 installer 顶上去**。
+
+---
+
+## 四、其它场景的处置规则
+
+### 4.1 纯文档变更（豁免简化流程）
+
+当本次 commit **仅**修改下列路径时，可豁免规则二第 2/3/4 步：
+
+- `AGENT-PROGRESS.md`
+- `docs/**`
+- `.codebuddy/**`
+- `.review/**`
+- 根目录 `*.md`（README / AGENTS / CLAUDE 等）
+
+豁免后的最小流程：本地静态校验（如涉及 markdown 内嵌代码块的语法）→ commit & push → 跳过 CHANGELOG（与 `CHANGELOG.md` §Conventions "Pure internal documentation changes may skip CHANGELOG updates" 一致）→ 刷新 `AGENT-PROGRESS.md`（如改动了规则或目录结构）。
+
+> ⚠️ 一旦该 commit 同时触及 `src/**` / `hooks/**` / `agents/**` / `test/**` / `package.json` / `package-lock.json` 任一文件，**必须回退到规则二完整流程**。
+
+### 4.2 依赖升级
+
+执行 `npm install <pkg>@<ver>` / `npm update` 后：
+
+1. 必须 commit `package.json` **与** `package-lock.json`（后者是 181KB 大文件，diff 看不全是正常的，但不能漏 commit）。**ci.yml 与 build.yml 现均使用 `npm ci` + npm cache**，lock 不同步 → CI 直接红。
+2. 必须重跑 `npm test` 全量并附结果。
+3. 走规则二流程；CHANGELOG 归类为 `Changed` 或 `Internal / Refactor`。
+4. 涉及 Electron / electron-builder / electron-updater 主版本升级 → 必须用 `gh workflow run build.yml --ref <branch>` 验证三平台构建链路，**通过后才能合主**。dependabot 已默认忽略这三个包的 major 升级于 `.github/dependabot.yml`，需人工发起。
+
+### 4.3 Sidecar 二进制升级（`bin/cc-connect-clawd/`）
+
+1. 必须更新对应的 checksum（`scripts/verify-sidecar-binaries.js` 引用的固定值）。
+2. 本地必须跑 `npm run verify:sidecars` 通过。
+3. CI 上 `node scripts/verify-sidecar-binaries.js prebuild:win:all` / `prebuild:mac` / `prebuild:linux` 必须三平台全绿，否则视为发版失败。
+4. 走规则三发版流程，CHANGELOG 归类为 `Release & Packaging`。
+
+### 4.4 Upstream 同步（`sync-upstream.yml` 合并冲突）
+
+1. 冲突解决 owner = 当前会话的开发者（fork 维护者），不能由 Agent 自动决议。
+2. 解决冲突的 commit **不得**夹带功能性改动；只解决冲突 + 通过 `npm test`。
+3. 解决后无需立即发版；可在下一次正式发版时累计带入。
+4. 若 upstream 对 `build.yml` / `package.json` 有结构性改动 → 必须用 `gh workflow run build.yml --ref <branch>` 验证一次再合主。
+
+---
+
+## 五、踩坑经验沉淀
+
+> 目的：将开发过程中踩到的坑转化为可复用的经验，避免同一类问题反复出现。
+
+### 5.1 何时记录
+
+当遇到以下任一情况时，**必须**在当前会话结束前将经验沉淀：
+
+1. **非显而易见的失败**：某个操作按直觉应该成功但实际失败了（如 `.gitignore` 的排除规则导致文件未进库、CI 因隐式依赖而红等）。
+2. **耗时排查**：定位问题花费了超过 2 轮工具调用 / 超过 10 分钟的排查时间。
+3. **环境/工具链的隐式行为**：发现了文档未明确说明的工具链行为（如 PowerShell 5.x 不支持 `&&`、`npm ci` 对 lock 文件的严格要求等）。
+4. **规则/流程的盲区**：现有规则未覆盖到的场景，导致执行时需要临时决策。
+5. **重复犯错**：同一类问题在不同会话中出现过两次及以上。
+
+### 5.2 记录到哪里
+
+按经验的性质分流到不同位置：
+
+| 经验性质 | 记录位置 | 说明 |
+|----------|----------|------|
+| **项目级通用坑**（任何开发者/Agent 都可能踩到） | `AGENT-PROGRESS.md` §六「已知问题与注意事项」 | 追加编号条目，简明扼要 |
+| **规则级缺陷**（现有规则有漏洞或歧义） | 本文件（`project-continuity.mdc`）对应章节 | 直接修补规则，或在相关步骤旁加 `> ⚠️` 警告 |
+| **特定模块/文件的陷阱**（仅影响某个模块的开发者） | 对应源码文件顶部注释 或 `docs/investigations/` 下专题文档 | 就近原则，让下次改这个文件的人第一时间看到 |
+
+### 5.3 记录格式
+
+每条经验必须包含以下三要素（可简短，但不可缺）：
+
+```
+**坑**：<一句话描述踩到了什么>
+**根因**：<为什么会踩到，底层机制是什么>
+**规避**：<以后怎么做可以避免，或者已经加了什么防护>
+```
+
+示例（来自本项目真实经历）：
+
+> **坑**：新增 `scripts/check-syntax.js` 后 push，CI 报找不到该文件。
+> **根因**：`.gitignore` 第 86 行 `scripts/*` 排除了整个目录，需逐条 `!scripts/<file>` 豁免。
+> **规避**：已补 `!scripts/check-syntax.js`；规则 §六-12 已记录此约定。未来新增 `scripts/*.js` 时必须同步补豁免条目。
+
+### 5.4 会话结束时的自检
+
+在刷新 `AGENT-PROGRESS.md`（规则二第 7 步 / 规则三第 7 步）时，**额外执行一次回顾**：
+
+- 本次会话是否踩过坑？
+- 踩的坑是否已按 §5.2 分流记录？
+- 是否需要反向修补本规则文件（如增加步骤、加警告、扩展检查清单）？
+
+如果答案为"是"但尚未记录 → **不得结束会话**，先补完经验沉淀再收尾。
+
+### 5.5 经验的生命周期
+
+- **新增**：踩坑当次会话立即记录。
+- **升级**：如果同一条经验被触发 ≥ 2 次，应考虑将其从 `AGENT-PROGRESS.md` 的"已知问题"**升级为规则**（写入本文件对应章节，或转化为自动化检查脚本）。
+- **归档**：当坑已被自动化手段彻底消除（如 CI 检查、lint 规则）且连续 5 个会话未再触发时，可将其从"已知问题"移至 `docs/investigations/` 归档，但保留规则中的防护措施。
+
+---
+
+> 维护提示：本规则与 `AGENT-PROGRESS.md`、`CHANGELOG.md`、`.github/workflows/build.yml`、`.github/workflows/ci.yml`、`.github/workflows/auto-tag.yml`、`.github/dependabot.yml`、`scripts/check-syntax.js`、`package.json.scripts` 强耦合。修改本规则时请同步检查这些文件是否需要联动调整，避免规则双源不一致。
