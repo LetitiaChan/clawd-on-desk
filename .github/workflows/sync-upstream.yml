@@ -23,7 +23,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ env.LOCAL_BRANCH }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
 
       - name: Configure git identity
         run: |
@@ -66,7 +66,7 @@ jobs:
       - name: Create sync branch & PR (diverged history)
         if: steps.cmp.outputs.status == 'diverged'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
         run: |
           SYNC_BRANCH="chore/sync-upstream-$(date -u +%Y%m%d-%H%M%S)"
           git checkout -b "$SYNC_BRANCH" "upstream/${UPSTREAM_BRANCH}"
