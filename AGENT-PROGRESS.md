@@ -3,8 +3,8 @@
 > 本文件由 `.codebuddy/rules/project-continuity.mdc` 强制约束维护。
 > 每次会话启动时 Agent 会读取本文件恢复上下文；会话结束/完成重要里程碑时主动更新。
 >
-> **最后更新**：2026-07-14 15:48（commit `3fe0825`：docs: enhance release-template.md with detailed fill-in guidance and alignment to release rules）
-> **当前 HEAD**：`3fe0825` (branch: `main`，已 push)
+> **最后更新**：2026-07-14 15:58（commit `5185e57`：ci: add rule consistency check (npm run check:rules) to CI pipeline）
+> **当前 HEAD**：`5185e57` (branch: `main`，已 push)
 > **package.json 版本**：`0.7.14`（已发版；后续改动进 `[Unreleased]`）
 > ⚠️ **构建约定**：本地不打包，所有 `electron-builder` 产出由 CI 完成。详见 `.codebuddy/rules/project-continuity.mdc`。
 
@@ -34,16 +34,16 @@ Claude Code、CodeBuddy、Codex、Copilot CLI、Cursor Agent、Gemini CLI、Gong
 
 | Commit | 说明 |
 |--------|------|
-| `3fe0825` | docs: enhance release-template.md with detailed fill-in guidance and alignment to release rules（**HEAD**） |
+| `5185e57` | ci: add rule consistency check (npm run check:rules) to CI pipeline（**HEAD**） |
+| `db28db0` | docs: mark build.yml matrix refactor as already completed in AGENT-PROGRESS |
+| `7c935cd` | docs: update AGENT-PROGRESS.md — mark release-template governance complete |
+| `3fe0825` | docs: enhance release-template.md with detailed fill-in guidance and alignment to release rules |
 | `520ee15` | chore: establish .review/ directory for code review record archival |
 | `17510a1` | docs: update AGENT-PROGRESS.md — mark review archival governance complete |
 | `7be2872` | chore: track AGENT-PROGRESS.md and .codebuddy/ in version control |
 | `494026c` | fix(ci): use PAT for sync-upstream to allow pushing branches with workflow file changes |
 | `483d61c` | fix(updater): publish releases immediately so update check works |
 | `ae4f496` | release: v0.7.14 |
-| `163f5c3` | fix(node): show real Node.js path in CLI summary |
-| `b3932cb` | test+docs: Node.js install guide tests (10 cases) |
-| `25c89bf` | feat(node): install guidance in wizard and doctor |
 
 > 主线：Gongfeng Copilot 支持 + fork 自动化发布 + ci.yml 远端兜底流水线。
 
@@ -129,7 +129,7 @@ clawd-on-desk/
 
 2. **🟠 P1 待办**
    - ~~build.yml matrix 化（合并三 job 重复定义）~~ ✅ 已完成（v0.7.13 周期，当前 `build.yml` 已是单 job + `strategy.matrix.include` 三平台结构）。
-   - 规则一致性自动校验。
+   - ~~规则一致性自动校验~~ ✅ 已完成（commit `5185e57`，`npm run check:rules` 已集成到 `ci.yml` pipeline）。
 
 3. **🟢 长期**
    - 规则演进（ESLint / OpenSpec / 双市场发布等按需扩展）。
