@@ -109,8 +109,11 @@ scripts/*
 # Cursor local config (MCP, rules from omc setup)
 .cursor/
 
-# Code review records
-.review/
+# Code review records — auto-generated *_record.md stay local, manual docs tracked
+.review/*_record.md
+!.review/README.md
+!.review/TEMPLATE.md
+!.review/review-*.md
 todo.md
 
 # Root-level test / verification scratch files
