@@ -65,6 +65,9 @@ jobs:
       - name: Static syntax & require check
         run: npm run check:syntax
 
+      - name: Rule consistency check
+        run: npm run check:rules
+
       - name: Unit tests
         run: npm test
 
