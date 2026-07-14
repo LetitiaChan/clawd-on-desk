@@ -128,7 +128,7 @@ clawd-on-desk/
    - `CLAUDE.md` 已在工作树中被删除，确认是否正式 commit 移除。
 
 2. **🟠 P1 待办**
-   - build.yml matrix 化（合并三 job 重复定义）。
+   - ~~build.yml matrix 化（合并三 job 重复定义）~~ ✅ 已完成（v0.7.13 周期，当前 `build.yml` 已是单 job + `strategy.matrix.include` 三平台结构）。
    - 规则一致性自动校验。
 
 3. **🟢 长期**
