@@ -122,16 +122,9 @@ clawd-on-desk/
 ## 七、下次会话建议
 
 1. **🟡 治理**
-   - ~~`.gitignore` 双源问题~~ ✅ 已解决。
-   - ~~评审记录沉淀~~ ✅ 已完成（commit `520ee15`，`.review/` 目录已建立）。
-   - ~~release-template.md 模板完善~~ ✅ 已完成（commit `3fe0825`，补充填写指引 + 自检清单 + 与发版规则对齐）。
    - `CLAUDE.md` 已在工作树中被删除，确认是否正式 commit 移除。
 
-2. **🟠 P1 待办**
-   - ~~build.yml matrix 化（合并三 job 重复定义）~~ ✅ 已完成（v0.7.13 周期，当前 `build.yml` 已是单 job + `strategy.matrix.include` 三平台结构）。
-   - ~~规则一致性自动校验~~ ✅ 已完成（commit `5185e57`，`npm run check:rules` 已集成到 `ci.yml` pipeline）。
-
-3. **🟢 长期**
+2. **🟢 长期**
    - 规则演进（ESLint / OpenSpec / 双市场发布等按需扩展）。
 
 ---
