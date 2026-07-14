@@ -27,7 +27,12 @@ afterEach(() => {
 });
 
 describe("CodeBuddy hook installer", () => {
-  it("registers all command events + PermissionRequest HTTP hook on fresh install", () => {
+  it("does not register a PermissionRequest event (IDE has none)", () => {
+    assert.ok(!CODEBUDDY_HOOK_EVENTS.includes("PermissionRequest"));
+    assert.strictEqual(CODEBUDDY_HOOK_EVENTS.length, 8);
+  });
+
+  it("registers one command hook per supported event on fresh install", () => {
     const settingsPath = makeTempSettingsFile({});
     const result = registerCodeBuddyHooks({
       silent: true,
@@ -35,22 +40,19 @@ describe("CodeBuddy hook installer", () => {
       nodeBin: "/usr/local/bin/node",
     });
 
-    // 9 command hooks (including PermissionRequest) + 1 HTTP hook = 10
-    assert.strictEqual(result.added, 10);
+    // 8 command hooks, no HTTP hook, no PermissionRequest event
+    assert.strictEqual(result.added, 8);
     assert.strictEqual(result.skipped, 0);
     assert.strictEqual(result.updated, 0);
+    assert.strictEqual(result.removed, 0);
 
     const settings = readJson(settingsPath);
+    assert.ok(!settings.hooks.PermissionRequest, "must not create PermissionRequest event");
 
-    // Verify command hooks (nested Claude Code format)
     for (const event of CODEBUDDY_HOOK_EVENTS) {
       assert.ok(Array.isArray(settings.hooks[event]), `missing hooks for ${event}`);
-      // PermissionRequest has both command + HTTP hook entries
-      const commandEntries = settings.hooks[event].filter(
-        e => e.hooks && e.hooks.some(h => h.type === "command")
-      );
-      assert.strictEqual(commandEntries.length, 1, `expected 1 command hook for ${event}`);
-      const entry = commandEntries[0];
+      assert.strictEqual(settings.hooks[event].length, 1, `expected 1 entry for ${event}`);
+      const entry = settings.hooks[event][0];
       assert.strictEqual(entry.matcher, "");
       assert.ok(Array.isArray(entry.hooks));
       assert.strictEqual(entry.hooks[0].type, "command");
@@ -58,19 +60,13 @@ describe("CodeBuddy hook installer", () => {
       assert.ok(entry.hooks[0].command.includes("/usr/local/bin/node"));
     }
 
-    // Verify PermissionRequest HTTP hook (in addition to command hook)
-    const permEntries = settings.hooks.PermissionRequest;
-    assert.ok(Array.isArray(permEntries));
-    assert.strictEqual(permEntries.length, 2); // command + HTTP
-    const httpEntry = permEntries.find(
-      e => e.hooks && e.hooks.some(h => h.type === "http")
-    );
-    assert.ok(httpEntry, "missing HTTP hook entry for PermissionRequest");
-    const permHook = httpEntry.hooks[0];
-    assert.strictEqual(permHook.type, "http");
-    assert.ok(permHook.url.includes("127.0.0.1"));
-    assert.ok(permHook.url.includes("/permission"));
-    assert.strictEqual(permHook.timeout, 600);
+    // No HTTP hooks anywhere
+    for (const entries of Object.values(settings.hooks)) {
+      for (const entry of entries) {
+        const inner = Array.isArray(entry.hooks) ? entry.hooks : [];
+        assert.ok(!inner.some((h) => h.type === "http"), "no HTTP hook should be registered");
+      }
+    }
   });
 
   it("is idempotent on second run", () => {
@@ -82,6 +78,7 @@ describe("CodeBuddy hook installer", () => {
 
     assert.strictEqual(result.added, 0);
     assert.strictEqual(result.updated, 0);
+    assert.strictEqual(result.removed, 0);
     assert.strictEqual(fs.readFileSync(settingsPath, "utf8"), contentBefore);
   });
 
@@ -123,7 +120,6 @@ describe("CodeBuddy hook installer", () => {
 
     assert.ok(result.updated >= 1);
     const settings = readJson(settingsPath);
-    // Flat entry gets its command updated in place
     assert.ok(settings.hooks.PreToolUse[0].command.includes("/usr/local/bin/node"));
     assert.ok(!settings.hooks.PreToolUse[0].command.includes("/old/path/"));
   });
@@ -157,12 +153,12 @@ describe("CodeBuddy hook installer", () => {
     assert.ok(settings.hooks.PostToolUse[0].command.includes("/home/user/.volta/bin/node"));
   });
 
-  it("updates stale PermissionRequest HTTP URL", () => {
+  it("scrubs a legacy PermissionRequest HTTP hook left by older installs", () => {
     const settingsPath = makeTempSettingsFile({
       hooks: {
         PermissionRequest: [{
           matcher: "",
-          hooks: [{ type: "http", url: "http://127.0.0.1:99999/permission", timeout: 600 }],
+          hooks: [{ type: "http", url: "http://127.0.0.1:23333/permission", timeout: 600 }],
         }],
       },
     });
@@ -173,11 +169,32 @@ describe("CodeBuddy hook installer", () => {
       nodeBin: "/usr/local/bin/node",
     });
 
-    assert.ok(result.updated >= 1);
+    assert.ok(result.removed >= 1, "should report removed stale entries");
     const settings = readJson(settingsPath);
-    const permHook = settings.hooks.PermissionRequest[0].hooks[0];
-    assert.ok(permHook.url.includes("/permission"));
-    assert.ok(permHook.url.includes("127.0.0.1"));
-    assert.notStrictEqual(permHook.url, "http://127.0.0.1:99999/permission");
+    assert.ok(!settings.hooks.PermissionRequest, "PermissionRequest event should be deleted");
+  });
+
+  it("scrubs a legacy PermissionRequest command hook and preserves foreign entries", () => {
+    const settingsPath = makeTempSettingsFile({
+      hooks: {
+        PermissionRequest: [
+          { matcher: "", hooks: [{ type: "command", command: '"/x/node" "/y/codebuddy-hook.js"' }] },
+          { matcher: "", hooks: [{ type: "command", command: '"/x/node" "/y/some-other-tool.js"' }] },
+        ],
+      },
+    });
+
+    const result = registerCodeBuddyHooks({
+      silent: true,
+      settingsPath,
+      nodeBin: "/usr/local/bin/node",
+    });
+
+    assert.ok(result.removed >= 1);
+    const settings = readJson(settingsPath);
+    // Foreign (non-Clawd) entry survives
+    assert.ok(Array.isArray(settings.hooks.PermissionRequest));
+    assert.strictEqual(settings.hooks.PermissionRequest.length, 1);
+    assert.ok(settings.hooks.PermissionRequest[0].hooks[0].command.includes("some-other-tool.js"));
   });
 });

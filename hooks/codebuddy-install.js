@@ -5,17 +5,21 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { resolveNodeBin, buildPermissionUrl, DEFAULT_SERVER_PORT, readRuntimePort } = require("./server-config");
+const { resolveNodeBin } = require("./server-config");
 const { writeJsonAtomic, asarUnpackedPath, extractExistingNodeBin } = require("./json-utils");
 const MARKER = "codebuddy-hook.js";
 const HTTP_MARKER = "/permission";
 const DEFAULT_PARENT_DIR = path.join(os.homedir(), ".codebuddy");
 const DEFAULT_CONFIG_PATH = path.join(DEFAULT_PARENT_DIR, "settings.json");
 
-// CodeBuddy supported hook events (as of v1.16+)
-// PermissionRequest is included as a command hook fallback — if CodeBuddy IDE
-// does not support HTTP-type hooks, the command hook will fire and internally
-// forward the request to Clawd's /permission endpoint.
+// CodeBuddy supported hook events (as of v1.16+).
+// NOTE: CodeBuddy IDE has NO dedicated `PermissionRequest` event. Permission
+// approval is carried by `PreToolUse`'s `permissionDecision` (allow/deny/ask):
+// codebuddy-hook.js intercepts PreToolUse payloads whose
+// `tool_input.requires_approval === true` and forwards them to Clawd's
+// /permission endpoint. Registering a `PermissionRequest` hook here (command or
+// HTTP) is dead config — the IDE never fires it. Any such entry left over from
+// older installs is scrubbed by cleanupStalePermissionRequestHooks() below.
 const CODEBUDDY_HOOK_EVENTS = [
   "SessionStart",
   "SessionEnd",
@@ -23,10 +27,43 @@ const CODEBUDDY_HOOK_EVENTS = [
   "PreToolUse",
   "PostToolUse",
   "Stop",
-  "PermissionRequest",
   "Notification",
   "PreCompact",
 ];
+
+// Remove Clawd-owned entries under the non-existent `PermissionRequest` event
+// (both our command hook and the legacy HTTP /permission hook). Older installs
+// wired permission approval to this event, which CodeBuddy never triggers.
+// Returns the number of removed entries.
+function cleanupStalePermissionRequestHooks(settings) {
+  const entries = settings.hooks && settings.hooks.PermissionRequest;
+  if (!Array.isArray(entries)) return 0;
+
+  let removed = 0;
+  const kept = [];
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object") { kept.push(entry); continue; }
+
+    if (typeof entry.command === "string" && entry.command.includes(MARKER)) { removed++; continue; }
+    if (entry.type === "http" && typeof entry.url === "string" && entry.url.includes(HTTP_MARKER)) { removed++; continue; }
+
+    if (Array.isArray(entry.hooks)) {
+      const keptInner = entry.hooks.filter((h) => {
+        if (h && typeof h.command === "string" && h.command.includes(MARKER)) { removed++; return false; }
+        if (h && h.type === "http" && typeof h.url === "string" && h.url.includes(HTTP_MARKER)) { removed++; return false; }
+        return true;
+      });
+      if (keptInner.length > 0) { entry.hooks = keptInner; kept.push(entry); }
+      continue;
+    }
+
+    kept.push(entry);
+  }
+
+  if (kept.length > 0) settings.hooks.PermissionRequest = kept;
+  else delete settings.hooks.PermissionRequest;
+  return removed;
+}
 
 /**
  * Register Clawd hooks into ~/.codebuddy/settings.json
@@ -127,41 +164,10 @@ function registerCodeBuddyHooks(options = {}) {
     changed = true;
   }
 
-  // Register PermissionRequest HTTP hook (blocking, for permission bubble)
-  const hookPort = readRuntimePort() || DEFAULT_SERVER_PORT;
-  const permissionUrl = buildPermissionUrl(hookPort);
-  const permEvent = "PermissionRequest";
-  if (!Array.isArray(settings.hooks[permEvent])) {
-    settings.hooks[permEvent] = [];
-    changed = true;
-  }
-  let permFound = false;
-  for (const entry of settings.hooks[permEvent]) {
-    if (!entry || typeof entry !== "object") continue;
-    const innerHooks = entry.hooks;
-    if (Array.isArray(innerHooks)) {
-      for (const h of innerHooks) {
-        if (!h || h.type !== "http" || typeof h.url !== "string") continue;
-        if (!h.url.includes(HTTP_MARKER)) continue;
-        permFound = true;
-        if (h.url !== permissionUrl) { h.url = permissionUrl; updated++; changed = true; }
-        break;
-      }
-    }
-    if (!permFound && entry.type === "http" && typeof entry.url === "string" && entry.url.includes(HTTP_MARKER)) {
-      permFound = true;
-      if (entry.url !== permissionUrl) { entry.url = permissionUrl; updated++; changed = true; }
-    }
-    if (permFound) break;
-  }
-  if (!permFound) {
-    settings.hooks[permEvent].push({
-      matcher: "",
-      hooks: [{ type: "http", url: permissionUrl, timeout: 600 }],
-    });
-    added++;
-    changed = true;
-  }
+  // Heal older installs that wired permission approval to the non-existent
+  // `PermissionRequest` event. Those command / HTTP hooks never fire, so drop them.
+  const removedStale = cleanupStalePermissionRequestHooks(settings);
+  if (removedStale > 0) changed = true;
 
   if (added > 0 || changed) {
     writeJsonAtomic(settingsPath, settings);
@@ -169,10 +175,10 @@ function registerCodeBuddyHooks(options = {}) {
 
   if (!options.silent) {
     console.log(`Clawd CodeBuddy hooks → ${settingsPath}`);
-    console.log(`  Added: ${added}, updated: ${updated}, skipped: ${skipped}`);
+    console.log(`  Added: ${added}, updated: ${updated}, skipped: ${skipped}, removed(stale): ${removedStale}`);
   }
 
-  return { added, skipped, updated };
+  return { added, skipped, updated, removed: removedStale };
 }
 
 /**
