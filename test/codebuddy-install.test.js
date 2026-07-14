@@ -35,8 +35,8 @@ describe("CodeBuddy hook installer", () => {
       nodeBin: "/usr/local/bin/node",
     });
 
-    // 8 command hooks + 1 HTTP hook = 9
-    assert.strictEqual(result.added, 9);
+    // 9 command hooks (including PermissionRequest) + 1 HTTP hook = 10
+    assert.strictEqual(result.added, 10);
     assert.strictEqual(result.skipped, 0);
     assert.strictEqual(result.updated, 0);
 
@@ -45,21 +45,28 @@ describe("CodeBuddy hook installer", () => {
     // Verify command hooks (nested Claude Code format)
     for (const event of CODEBUDDY_HOOK_EVENTS) {
       assert.ok(Array.isArray(settings.hooks[event]), `missing hooks for ${event}`);
-      assert.strictEqual(settings.hooks[event].length, 1);
-      const entry = settings.hooks[event][0];
+      // PermissionRequest has both command + HTTP hook entries
+      const commandEntries = settings.hooks[event].filter(
+        e => e.hooks && e.hooks.some(h => h.type === "command")
+      );
+      assert.strictEqual(commandEntries.length, 1, `expected 1 command hook for ${event}`);
+      const entry = commandEntries[0];
       assert.strictEqual(entry.matcher, "");
       assert.ok(Array.isArray(entry.hooks));
-      assert.strictEqual(entry.hooks.length, 1);
       assert.strictEqual(entry.hooks[0].type, "command");
       assert.ok(entry.hooks[0].command.includes(MARKER));
       assert.ok(entry.hooks[0].command.includes("/usr/local/bin/node"));
     }
 
-    // Verify PermissionRequest HTTP hook
+    // Verify PermissionRequest HTTP hook (in addition to command hook)
     const permEntries = settings.hooks.PermissionRequest;
     assert.ok(Array.isArray(permEntries));
-    assert.strictEqual(permEntries.length, 1);
-    const permHook = permEntries[0].hooks[0];
+    assert.strictEqual(permEntries.length, 2); // command + HTTP
+    const httpEntry = permEntries.find(
+      e => e.hooks && e.hooks.some(h => h.type === "http")
+    );
+    assert.ok(httpEntry, "missing HTTP hook entry for PermissionRequest");
+    const permHook = httpEntry.hooks[0];
     assert.strictEqual(permHook.type, "http");
     assert.ok(permHook.url.includes("127.0.0.1"));
     assert.ok(permHook.url.includes("/permission"));

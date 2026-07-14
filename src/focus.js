@@ -556,6 +556,9 @@ function buildWindowsTitleCandidates(request, cwdCandidates) {
     case "codex":
       addUniqueTitleCandidate(candidates, "codex");
       break;
+    case "codebuddy":
+      addUniqueTitleCandidate(candidates, "CodeBuddy");
+      break;
     default:
       break;
   }

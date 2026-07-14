@@ -3,8 +3,9 @@
 // Registered in ~/.codebuddy/settings.json by hooks/codebuddy-install.js
 // CodeBuddy uses Claude Code-compatible hook format with identical event names.
 
-const { postStateToRunningServer, readHostPrefix } = require("./server-config");
+const { postStateToRunningServer, readHostPrefix, readRuntimePort, DEFAULT_SERVER_PORT, getPortCandidates } = require("./server-config");
 const { createPidResolver, readStdinJson, getPlatformConfig } = require("./shared-process");
+const http = require("http");
 
 // CodeBuddy hook event → { state, event } for the Clawd state machine
 const HOOK_MAP = {
@@ -14,7 +15,6 @@ const HOOK_MAP = {
   PreToolUse:       { state: "working",      event: "PreToolUse" },
   PostToolUse:      { state: "working",      event: "PostToolUse" },
   Stop:             { state: "attention",    event: "Stop" },
-  // PermissionRequest: handled by HTTP hook (blocking), not this command hook
   Notification:     { state: "notification", event: "Notification" },
   PreCompact:       { state: "sweeping",     event: "PreCompact" },
 };
@@ -39,8 +39,57 @@ function stdoutForEvent(hookName) {
   return "{}";
 }
 
+// PermissionRequest command hook fallback — forwards the full payload to
+// Clawd's /permission HTTP endpoint and relays the response back to stdout.
+// This handles the case where CodeBuddy IDE does not support HTTP-type hooks.
+function forwardPermissionRequest(payload) {
+  const port = readRuntimePort() || DEFAULT_SERVER_PORT;
+  const body = JSON.stringify(payload);
+  const req = http.request({
+    hostname: "127.0.0.1",
+    port,
+    path: "/permission",
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    timeout: 600000, // 600s — matches HTTP hook timeout
+  }, (res) => {
+    let data = "";
+    res.on("data", (chunk) => { data += chunk; });
+    res.on("end", () => {
+      // Relay the server's response (allow/deny/suggestions) to stdout
+      if (data) {
+        process.stdout.write(data + "\n");
+      } else {
+        process.stdout.write("{}\n");
+      }
+      process.exit(0);
+    });
+  });
+  req.on("error", () => {
+    // Server unreachable — return empty response so CodeBuddy falls back
+    // to its built-in permission prompt
+    process.stdout.write("{}\n");
+    process.exit(0);
+  });
+  req.on("timeout", () => {
+    req.destroy();
+    process.stdout.write("{}\n");
+    process.exit(0);
+  });
+  req.end(body);
+}
+
 readStdinJson().then((payload) => {
   const hookName = (payload && payload.hook_event_name) || "";
+
+  // PermissionRequest: forward to Clawd's /permission endpoint (blocking).
+  // This command hook acts as a fallback when CodeBuddy IDE doesn't fire
+  // the HTTP hook. If the HTTP hook also fires, the server deduplicates.
+  if (hookName === "PermissionRequest") {
+    forwardPermissionRequest(payload);
+    return;
+  }
+
   const mapped = HOOK_MAP[hookName];
 
   if (!mapped) {

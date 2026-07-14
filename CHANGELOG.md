@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **CodeBuddy IDE PermissionRequest hook not firing.** CodeBuddy IDE may not support HTTP-type hooks in `settings.json`. Added `PermissionRequest` to the command hook event list so a command hook is registered as fallback; `codebuddy-hook.js` now intercepts the event and internally forwards the full payload to Clawd's `/permission` HTTP endpoint (600 s timeout, matching the HTTP hook contract). If the server is unreachable the hook returns `{}` so CodeBuddy falls back to its built-in prompt.
+- **CodeBuddy IDE terminal focus not working.** Two sub-issues: (1) the VS Code extension `clawd-terminal-focus` had `activationEvents: ["onUri"]` which meant the HTTP server only started when a URI was opened — changed to `"onStartupFinished"` so the server starts automatically on editor launch; (2) `buildWindowsTitleCandidates` in `focus.js` had no case for `agentId === "codebuddy"` — added `"CodeBuddy"` as a window title candidate so the PowerShell focus helper can locate the correct window.
 - **Update check falsely reports "up to date" when a new release exists.** The CI workflow (`build.yml`) created GitHub Releases as `draft: true`, which meant the GitHub API `/releases/latest` endpoint never returned the new version. The app's `updater.js` calls this endpoint first and short-circuits with "already up to date" when the returned version ≤ current — so users on older versions could never discover the update. Changed `draft: true` → `draft: false` so releases are published immediately upon CI completion, making them visible to the update checker.
 
 ---

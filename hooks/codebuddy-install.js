@@ -13,6 +13,9 @@ const DEFAULT_PARENT_DIR = path.join(os.homedir(), ".codebuddy");
 const DEFAULT_CONFIG_PATH = path.join(DEFAULT_PARENT_DIR, "settings.json");
 
 // CodeBuddy supported hook events (as of v1.16+)
+// PermissionRequest is included as a command hook fallback — if CodeBuddy IDE
+// does not support HTTP-type hooks, the command hook will fire and internally
+// forward the request to Clawd's /permission endpoint.
 const CODEBUDDY_HOOK_EVENTS = [
   "SessionStart",
   "SessionEnd",
@@ -20,6 +23,7 @@ const CODEBUDDY_HOOK_EVENTS = [
   "PreToolUse",
   "PostToolUse",
   "Stop",
+  "PermissionRequest",
   "Notification",
   "PreCompact",
 ];
