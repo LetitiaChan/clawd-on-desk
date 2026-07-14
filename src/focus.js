@@ -491,13 +491,28 @@ function normalizePidChain(value) {
   return out.length ? out : null;
 }
 
+// Editors whose integrated-terminal tab can be precisely switched via the Clawd
+// terminal-focus extension (HTTP POST /focus-tab). All are VS Code forks running
+// the same extension host API, so a single extension serves them. Any value not
+// in this set means "no editor extension available" → skip the tab switch and
+// fall back to window-level focus only.
+//   - "code"      → VS Code           (~/.vscode/extensions)
+//   - "cursor"    → Cursor            (~/.cursor/extensions)
+//   - "codebuddy" → CodeBuddy CN IDE  (~/.codebuddycn/extensions)
+// main.js installTerminalFocusExtension() must install the extension into the
+// matching directory for each of these; keep the two lists in sync.
+const TERMINAL_TAB_FOCUS_EDITORS = new Set(["code", "cursor", "codebuddy"]);
+function normalizeEditor(value) {
+  return TERMINAL_TAB_FOCUS_EDITORS.has(value) ? value : null;
+}
+
 function normalizeFocusRequest(sourcePidOrRequest, cwd, editor, pidChain, meta = {}) {
   if (sourcePidOrRequest && typeof sourcePidOrRequest === "object" && !Array.isArray(sourcePidOrRequest)) {
     const request = sourcePidOrRequest;
     return {
       sourcePid: normalizePid(request.sourcePid ?? request.source_pid),
       cwd: typeof request.cwd === "string" ? request.cwd : "",
-      editor: request.editor === "code" || request.editor === "cursor" ? request.editor : null,
+      editor: normalizeEditor(request.editor),
       pidChain: normalizePidChain(request.pidChain ?? request.pid_chain),
       wtHwnd: normalizeHwndString(request.wtHwnd ?? request.wt_hwnd),
       sessionId: typeof request.sessionId === "string" ? request.sessionId : null,
@@ -509,7 +524,7 @@ function normalizeFocusRequest(sourcePidOrRequest, cwd, editor, pidChain, meta =
   return {
     sourcePid: normalizePid(sourcePidOrRequest),
     cwd: typeof cwd === "string" ? cwd : "",
-    editor: editor === "code" || editor === "cursor" ? editor : null,
+    editor: normalizeEditor(editor),
     pidChain: normalizePidChain(pidChain),
     wtHwnd: normalizeHwndString(meta && (meta.wtHwnd ?? meta.wt_hwnd)),
     sessionId: meta && typeof meta.sessionId === "string" ? meta.sessionId : null,
@@ -1151,6 +1166,7 @@ return {
     makeFocusCmd,
     buildWindowsTitleCandidates,
     normalizeFocusRequest,
+    normalizeEditor,
     summarizeCwd,
     handleFocusHelperCompleteOutput,
     PS_FOCUS_ADDTYPE,

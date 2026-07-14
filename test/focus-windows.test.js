@@ -204,6 +204,42 @@ describe("Windows terminal focus", () => {
     }
   });
 
+  it("keeps code/cursor/codebuddy editors so their terminal tab can be focused", () => {
+    const { initFocus, cleanup } = loadFocusWithMock();
+    try {
+      const focus = initFocus({});
+      const { normalizeEditor, normalizeFocusRequest } = focus.__test;
+
+      // Known VS Code forks are preserved (they all run the /focus-tab extension).
+      assert.strictEqual(normalizeEditor("code"), "code");
+      assert.strictEqual(normalizeEditor("cursor"), "cursor");
+      assert.strictEqual(normalizeEditor("codebuddy"), "codebuddy");
+      // Unknown / missing editors collapse to null → window-level focus only.
+      assert.strictEqual(normalizeEditor("vim"), null);
+      assert.strictEqual(normalizeEditor(""), null);
+      assert.strictEqual(normalizeEditor(undefined), null);
+      assert.strictEqual(normalizeEditor(null), null);
+
+      // The object request form (used by focusTerminalSession) must retain
+      // "codebuddy" so scheduleTerminalTabFocus dispatches /focus-tab.
+      assert.strictEqual(
+        normalizeFocusRequest({ sourcePid: 1234, editor: "codebuddy" }).editor,
+        "codebuddy"
+      );
+      // The positional form must behave identically.
+      assert.strictEqual(
+        normalizeFocusRequest(1234, "D:\\repo", "codebuddy", [1234]).editor,
+        "codebuddy"
+      );
+      assert.strictEqual(
+        normalizeFocusRequest({ sourcePid: 1234, editor: "unknown" }).editor,
+        null
+      );
+    } finally {
+      cleanup();
+    }
+  });
+
   it("only focuses attached legacy conhost windows, not ConPTY shim windows", () => {
     const { initFocus, cleanup } = loadFocusWithMock();
     try {

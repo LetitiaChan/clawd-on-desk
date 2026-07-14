@@ -2002,7 +2002,12 @@ Object.defineProperties(this || {}, {}); // no-op placeholder
 
 // ── Auto-install VS Code / Cursor terminal-focus extension ──
 const EXT_ID = "clawd.clawd-terminal-focus";
-const EXT_VERSION = "0.1.0";
+// Must match extensions/vscode/package.json "version". The install routine keys
+// the target dir name on this value and skips reinstall when the dir already
+// exists, so bumping the extension (e.g. the onUri→onStartupFinished activation
+// fix) WITHOUT bumping this constant means existing users never receive the
+// update. Keep the two in lockstep.
+const EXT_VERSION = "0.1.1";
 const EXT_DIR_NAME = `${EXT_ID}-${EXT_VERSION}`;
 
 function installTerminalFocusExtension() {
@@ -2018,9 +2023,17 @@ function installTerminalFocusExtension() {
     return;
   }
 
+  // Install into every supported VS Code fork's user extension dir. Each fork
+  // uses its own dataFolderName under $HOME. Keep this list in sync with
+  // focus.js TERMINAL_TAB_FOCUS_EDITORS so an editor Clawd can focus by tab
+  // always has the extension available to answer /focus-tab.
+  //   - .vscode      → VS Code
+  //   - .cursor      → Cursor
+  //   - .codebuddycn → CodeBuddy CN IDE (distinct from the ~/.codebuddy CLI dir)
   const targets = [
     path.join(home, ".vscode", "extensions"),
     path.join(home, ".cursor", "extensions"),
+    path.join(home, ".codebuddycn", "extensions"),
   ];
 
   const filesToCopy = ["package.json", "extension.js"];
@@ -2043,7 +2056,7 @@ function installTerminalFocusExtension() {
     }
   }
   if (installed > 0) {
-    console.log(`Clawd: terminal-focus extension installed to ${installed} editor(s). Restart VS Code/Cursor to activate.`);
+    console.log(`Clawd: terminal-focus extension installed to ${installed} editor(s). Restart the editor to activate.`);
   }
 }
 
