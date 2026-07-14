@@ -3,8 +3,8 @@
 > 本文件由 `.codebuddy/rules/project-continuity.mdc` 强制约束维护。
 > 每次会话启动时 Agent 会读取本文件恢复上下文；会话结束/完成重要里程碑时主动更新。
 >
-> **最后更新**：2026-07-14 15:45（commit `520ee15`：chore: establish .review/ directory for code review record archival）
-> **当前 HEAD**：`520ee15` (branch: `main`，已 push)
+> **最后更新**：2026-07-14 15:48（commit `3fe0825`：docs: enhance release-template.md with detailed fill-in guidance and alignment to release rules）
+> **当前 HEAD**：`3fe0825` (branch: `main`，已 push)
 > **package.json 版本**：`0.7.14`（已发版；后续改动进 `[Unreleased]`）
 > ⚠️ **构建约定**：本地不打包，所有 `electron-builder` 产出由 CI 完成。详见 `.codebuddy/rules/project-continuity.mdc`。
 
@@ -34,7 +34,9 @@ Claude Code、CodeBuddy、Codex、Copilot CLI、Cursor Agent、Gemini CLI、Gong
 
 | Commit | 说明 |
 |--------|------|
-| `520ee15` | chore: establish .review/ directory for code review record archival（**HEAD**） |
+| `3fe0825` | docs: enhance release-template.md with detailed fill-in guidance and alignment to release rules（**HEAD**） |
+| `520ee15` | chore: establish .review/ directory for code review record archival |
+| `17510a1` | docs: update AGENT-PROGRESS.md — mark review archival governance complete |
 | `7be2872` | chore: track AGENT-PROGRESS.md and .codebuddy/ in version control |
 | `494026c` | fix(ci): use PAT for sync-upstream to allow pushing branches with workflow file changes |
 | `483d61c` | fix(updater): publish releases immediately so update check works |
@@ -42,8 +44,6 @@ Claude Code、CodeBuddy、Codex、Copilot CLI、Cursor Agent、Gemini CLI、Gong
 | `163f5c3` | fix(node): show real Node.js path in CLI summary |
 | `b3932cb` | test+docs: Node.js install guide tests (10 cases) |
 | `25c89bf` | feat(node): install guidance in wizard and doctor |
-| `b2fb860` | feat(doctor): Node.js availability detection |
-| `5a75aa0` | release: v0.7.13 |
 
 > 主线：Gongfeng Copilot 支持 + fork 自动化发布 + ci.yml 远端兜底流水线。
 
@@ -124,8 +124,8 @@ clawd-on-desk/
 1. **🟡 治理**
    - ~~`.gitignore` 双源问题~~ ✅ 已解决。
    - ~~评审记录沉淀~~ ✅ 已完成（commit `520ee15`，`.review/` 目录已建立）。
+   - ~~release-template.md 模板完善~~ ✅ 已完成（commit `3fe0825`，补充填写指引 + 自检清单 + 与发版规则对齐）。
    - `CLAUDE.md` 已在工作树中被删除，确认是否正式 commit 移除。
-   - release-template.md 模板完善（当前模板已存在但内容简陋）。
 
 2. **🟠 P1 待办**
    - build.yml matrix 化（合并三 job 重复定义）。
