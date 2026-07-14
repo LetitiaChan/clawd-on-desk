@@ -3,8 +3,8 @@
 > 本文件由 `.codebuddy/rules/project-continuity.mdc` 强制约束维护。
 > 每次会话启动时 Agent 会读取本文件恢复上下文；会话结束/完成重要里程碑时主动更新。
 >
-> **最后更新**：2026-07-14 18:30（commit `a5f4dea`：fix(codebuddy): route permission approval through PreToolUse.requires_approval）
-> **当前 HEAD**：`a5f4dea` (branch: `main`，待 push)
+> **最后更新**：2026-07-14 22:00（commit `73a592b`：fix(codebuddy): enable precise terminal-tab focus in CodeBuddy IDE）
+> **当前 HEAD**：`73a592b` (branch: `main`，已 push，ci.yml 全绿)
 > **package.json 版本**：`0.7.14`（已发版；后续改动进 `[Unreleased]`）
 > ⚠️ **构建约定**：本地不打包，所有 `electron-builder` 产出由 CI 完成。详见 `.codebuddy/rules/project-continuity.mdc`。
 
@@ -34,7 +34,8 @@ Claude Code、CodeBuddy、Codex、Copilot CLI、Cursor Agent、Gemini CLI、Gong
 
 | Commit | 说明 |
 |--------|------|
-| `a5f4dea` | fix(codebuddy): route permission approval through PreToolUse.requires_approval（**HEAD**） |
+| `73a592b` | fix(codebuddy): enable precise terminal-tab focus in CodeBuddy IDE（**HEAD**） |
+| `a5f4dea` | fix(codebuddy): route permission approval through PreToolUse.requires_approval |
 | `eaeea32` | fix(codebuddy): add PermissionRequest command hook fallback + fix terminal focus in IDE |
 | `dcd5ab2` | chore: remove CLAUDE.md (superseded by .codebuddy/rules) |
 | `d80dae4` | docs: update AGENT-PROGRESS.md — mark rule consistency CI integration complete |
@@ -43,15 +44,14 @@ Claude Code、CodeBuddy、Codex、Copilot CLI、Cursor Agent、Gemini CLI、Gong
 | `7c935cd` | docs: update AGENT-PROGRESS.md — mark release-template governance complete |
 | `3fe0825` | docs: enhance release-template.md with detailed fill-in guidance and alignment to release rules |
 | `520ee15` | chore: establish .review/ directory for code review record archival |
-| `17510a1` | docs: update AGENT-PROGRESS.md — mark review archival governance complete |
 
-> 主线：CodeBuddy 权限审批修正（PreToolUse.requires_approval）+ Gongfeng Copilot 支持 + fork 自动化发布 + ci.yml 远端兜底流水线。
+> 主线：CodeBuddy IDE 终端 tab 精确聚焦修复 + CodeBuddy 权限审批修正（PreToolUse.requires_approval）+ Gongfeng Copilot 支持 + fork 自动化发布 + ci.yml 远端兜底流水线。
 
 ---
 
 ## 三、待实施的变更
 
-> 当前本地工作树干净。`CLAUDE.md` 在工作树中被删除（未暂存），待确认是否需要正式移除。无其他未提交改动。
+> 当前本地工作树干净（仅本 AGENT-PROGRESS 文档更新待提交）。无其他未提交源码改动。
 
 ---
 
@@ -120,6 +120,16 @@ clawd-on-desk/
     - **坑**：给 `PermissionRequest` 注册 command / HTTP hook 是死配置，IDE 永不触发；`PreToolUse` 若返回旧格式 `{"decision":"allow"}`，IDE 解析为 `permissionDecision=none` → `source=default_allow` 直接放行，Clawd 气泡从不出现。
     - **根因**：CodeBuddy 权限审批完全由 `PreToolUse` 的 `hookSpecificOutput.permissionDecision`（`allow`/`deny`/`ask`）承担；是否需要用户确认由输入里的 `tool_input.requires_approval`（boolean，可选）表达。
     - **规避**：`codebuddy-hook.js` 只拦截 `requires_approval===true` 的 `PreToolUse`，阻塞转发 `/permission`（走共享 CC 分支），把 `decision.behavior` 转成 `permissionDecision`；不可达/无决策/DND/禁用一律回退 `ask`（IDE 内置提示），绝不替用户决定。诊断锚点：IDE 日志 `C:\Users\<user>\AppData\Roaming\CodeBuddy CN\logs\...\clawd-on-desk__*.log` 里的 `[HookExecutor]` / `[ToolHookExecutor] PreToolUse hook result` / `[beforeExecute] Permission decision`。
+19. **CodeBuddy 有两套独立目录，别混用**：`~/.codebuddy/` 是 **CLI agent** 数据目录（无 `extensions/` 子目录）；`~/.codebuddycn/extensions/` 才是 **CodeBuddy CN IDE** 的用户扩展目录（VS Code fork，dataFolderName=`.codebuddycn`）。
+    - **坑**：跳转终端对 CodeBuddy IDE 无效，一度以为要往 `~/.codebuddy/` 装扩展。
+    - **根因**：terminal-tab 精确聚焦依赖 VS Code 扩展 `clawd.clawd-terminal-focus`，而 IDE 只读 `~/.codebuddycn/extensions/`；旧 `installTerminalFocusExtension` 的 targets 只含 `.vscode`/`.cursor`，CodeBuddy IDE 从未被下发扩展。
+    - **规避**：`main.js installTerminalFocusExtension` 的 targets 已补 `~/.codebuddycn/extensions`。诊断锚点：extension-host crash log stack trace 里的 `.codebuddycn\extensions\...` 路径可确认真实扩展目录。
+20. **terminal-tab 精确聚焦的 editor 值必须四处一致**：hook 上报 `detectedEditor`（"code"/"cursor"/"codebuddy"）→ `state.js` 存入 session → `focus.js normalizeEditor` 白名单 → `main.js installTerminalFocusExtension` 安装目标。
+    - **坑**：`focus.js normalizeFocusRequest` 的 editor 白名单硬编码只认 `"code"`/`"cursor"`，`"codebuddy"` 被归一化为 `null`，`scheduleTerminalTabFocus` 因 `!editor` 直接 return，`/focus-tab` 从不发出。
+    - **规避**：白名单已抽为模块级 `TERMINAL_TAB_FOCUS_EDITORS` Set 并暴露到 `__test`；新增受支持的 VS Code fork agent 时，必须同步更新「hook detectedEditor + focus.js Set + main.js targets」三处。
+21. **`main.js EXT_VERSION` 必须与 `extensions/vscode/package.json.version` lockstep**。
+    - **坑**：`EXT_VERSION` 停在 `0.1.0` 而扩展 package.json 已 bump 到 `0.1.1`，导致 commit `eaeea32` 的 `onStartupFinished` 修复从未下发给已装用户（版本号相等时 `installTerminalFocusExtension` 跳过覆盖）。
+    - **规避**：本次已同步为 `0.1.1`，并新增 `test/terminal-focus-extension-install.test.js` 断言两者一致，防止再次漂移。
 
 ---
 
