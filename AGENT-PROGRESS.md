@@ -3,9 +3,9 @@
 > 本文件由 `.codebuddy/rules/project-continuity.mdc` 强制约束维护。
 > 每次会话启动时 Agent 会读取本文件恢复上下文；会话结束/完成重要里程碑时主动更新。
 >
-> **最后更新**：2026-07-15（会话：CodeBuddy CLI 权限气泡兼容——IDE + CLI 双路径 + v0.7.15 发版）
-> **当前 HEAD**：`0cf4b1c` (branch: `main`，已 push；tag `v0.7.15` 已就位 → auto-tag 附注 tag 指向 `0cf4b1c`；build.yml 已 workflow_dispatch 触发打包)
-> **package.json 版本**：`0.7.15`（**已 commit + tag，CI 打包中**）
+> **最后更新**：2026-07-15（会话：更新检查 GitHub 403 限流误报为网络错误 hotfix）
+> **当前 HEAD**：`9e192d1` (branch: `main`，已 push；ci.yml ubuntu+windows 全绿 ✅)
+> **package.json 版本**：`0.7.15`（未 bump；本次为纯 hotfix，改动落在 `[Unreleased]`）
 > ⚠️ **构建约定**：本地不打包，所有 `electron-builder` 产出由 CI 完成。详见 `.codebuddy/rules/project-continuity.mdc`。
 
 ---
@@ -34,7 +34,8 @@ Claude Code、CodeBuddy、Codex、Copilot CLI、Cursor Agent、Gemini CLI、Gong
 
 | Commit | 说明 |
 |--------|------|
-| `0cf4b1c` | release: v0.7.15（CodeBuddy 双路径权限 + CN 识别/terminal-focus 修复 + hook 加固；固化 IDE `requires_approval` 仅 `execute_command`、删除/改文件不可拦截的 bundle 实证）（**HEAD**，tag `v0.7.15`） |
+| `9e192d1` | fix(updater): 将 GitHub 403/429 识别为限流而非网络错误，错误气泡提供「打开发布页」手动兜底（i18n 5 语言 + 回归测试）（**HEAD**） |
+| `0cf4b1c` | release: v0.7.15（CodeBuddy 双路径权限 + CN 识别/terminal-focus 修复 + hook 加固；固化 IDE `requires_approval` 仅 `execute_command`、删除/改文件不可拦截的 bundle 实证）（tag `v0.7.15`） |
 | `5ce1580` | fix(codebuddy): harden hook error handling, process detection and cleanup semantics |
 | `744e811` | fix(codebuddy): add editor to server-side whitelist for terminal-tab focus |
 | `2ebe2be` | docs: refresh AGENT-PROGRESS after codebuddy terminal-focus hotfix |
