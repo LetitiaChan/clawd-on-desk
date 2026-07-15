@@ -123,8 +123,9 @@ git --no-pager status --short
 4. **commit**：将 `package.json`、`CHANGELOG.md`、`docs/releases/release-v<x.y.z>.md` 一起作为一个语义清晰的 release commit 提交（建议 `release: v<x.y.z>`）。
 5. **push 并打 tag**：先 `git push` 默认分支（本仓库为 `main`），再 `git tag v<x.y.z>` 并 `git push origin v<x.y.z>`。
 
-   > 事实补充：`auto-tag.yml` 会在 push 到 `main` 且本次提交变更了 `package.json` 时检查远端 tag 是否存在，**如不存在会自动补上 `v<x.y.z>` tag** → 进而触发 `build.yml`。为达到可预测、不依赖隐式行为的发布纪律，**本规则仍要求开发者显式 `git push origin v<x.y.z>`**；如遇到双重触发争抢场景交由 build.yml 的 `concurrency: group=release-${{ github.ref }}` 兜底。
+   > ⚠️ 事实修正（v0.7.15 实测）：`auto-tag.yml` 会在 push 到 `main` 且本次提交变更了 `package.json` 时检查远端 tag，**如不存在会自动补上 `v<x.y.z>` 附注 tag**（指向 release commit）。但它用默认 `GITHUB_TOKEN` 创建 tag，受 GitHub Actions 防递归限制，**这个 tag 不会触发 `build.yml`**；且它往往抢在开发者显式 `git push origin v<x.y.z>` 之前建好 tag，导致显式 push 被 `! [rejected] (already exists)` 拒绝 → 结果 build.yml 根本没跑。因此本步仍要求显式 `git tag v<x.y.z>` + `git push origin v<x.y.z>`，但**必须预期它可能被 auto-tag 抢跑而失败**，失败不代表出错，真正判据在下一步的 build.yml 核对。双重触发争抢由 build.yml 的 `concurrency: group=release-${{ github.ref }}` 兜底。（详见 `AGENT-PROGRESS.md` §六-22。）
 6. **等待 CI 出包**：在 GitHub Actions 上盯住该 tag 触发的 workflow，确认：
+   - **先核对 build.yml 是否真的被触发**：`gh run list --workflow build.yml --limit 3`，确认出现**本 tag** 的运行（`headBranch=v<x.y.z>`）。**若没有**（几乎必然发生——因 auto-tag 用 GITHUB_TOKEN 建 tag 不级联触发，见 step 5 ⚠️），**立即手动触发**：`gh workflow run build.yml --ref v<x.y.z>`（release job 判据 `startsWith(github.ref,'refs/tags/v')` 在 workflow_dispatch + `--ref v<tag>` 下成立，会正常校验 release note 并建 Release）。
    - 三个 build job（Windows / macOS / Linux）全部 ✅，每个 job 都执行了 `npm test` + `npm run fetch:sidecars` + `node scripts/verify-sidecar-binaries.js` + `npx electron-builder`。
    - artifact 全部上传完成（NSIS exe + latest.yml / dmg + latest-mac.yml / AppImage + deb + latest-linux.yml；x64+arm64 视平台覆盖）。
    - draft GitHub Release 已自动创建并附上 `docs/releases/release-v<x.y.z>.md` 内容（如 release job 提示该文件不存在 → 立即按 ⚠️ 重发流程处理）。

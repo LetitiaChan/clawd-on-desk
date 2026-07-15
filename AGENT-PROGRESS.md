@@ -3,9 +3,9 @@
 > 本文件由 `.codebuddy/rules/project-continuity.mdc` 强制约束维护。
 > 每次会话启动时 Agent 会读取本文件恢复上下文；会话结束/完成重要里程碑时主动更新。
 >
-> **最后更新**：2026-07-15（会话：CodeBuddy CLI 权限气泡兼容——IDE + CLI 双路径）
-> **当前 HEAD**：`5ce1580` (branch: `main`，已 push，ci.yml 全绿)
-> **package.json 版本**：`0.7.15`（**发版预备中，尚未 commit/打 tag**；工作树含 v0.7.15 release prep + 本次 CLI 兼容改动）
+> **最后更新**：2026-07-15（会话：CodeBuddy CLI 权限气泡兼容——IDE + CLI 双路径 + v0.7.15 发版）
+> **当前 HEAD**：`0cf4b1c` (branch: `main`，已 push；tag `v0.7.15` 已就位 → auto-tag 附注 tag 指向 `0cf4b1c`；build.yml 已 workflow_dispatch 触发打包)
+> **package.json 版本**：`0.7.15`（**已 commit + tag，CI 打包中**）
 > ⚠️ **构建约定**：本地不打包，所有 `electron-builder` 产出由 CI 完成。详见 `.codebuddy/rules/project-continuity.mdc`。
 
 ---
@@ -34,7 +34,8 @@ Claude Code、CodeBuddy、Codex、Copilot CLI、Cursor Agent、Gemini CLI、Gong
 
 | Commit | 说明 |
 |--------|------|
-| `5ce1580` | fix(codebuddy): harden hook error handling, process detection and cleanup semantics（**HEAD**） |
+| `0cf4b1c` | release: v0.7.15（CodeBuddy 双路径权限 + CN 识别/terminal-focus 修复 + hook 加固；固化 IDE `requires_approval` 仅 `execute_command`、删除/改文件不可拦截的 bundle 实证）（**HEAD**，tag `v0.7.15`） |
+| `5ce1580` | fix(codebuddy): harden hook error handling, process detection and cleanup semantics |
 | `744e811` | fix(codebuddy): add editor to server-side whitelist for terminal-tab focus |
 | `2ebe2be` | docs: refresh AGENT-PROGRESS after codebuddy terminal-focus hotfix |
 | `73a592b` | fix(codebuddy): enable precise terminal-tab focus in CodeBuddy IDE |
@@ -43,7 +44,6 @@ Claude Code、CodeBuddy、Codex、Copilot CLI、Cursor Agent、Gemini CLI、Gong
 | `dcd5ab2` | chore: remove CLAUDE.md (superseded by .codebuddy/rules) |
 | `d80dae4` | docs: update AGENT-PROGRESS.md — mark rule consistency CI integration complete |
 | `5185e57` | ci: add rule consistency check (npm run check:rules) to CI pipeline |
-| `db28db0` | docs: mark build.yml matrix refactor as already completed in AGENT-PROGRESS |
 
 > 主线：CodeBuddy IDE 终端 tab 精确聚焦修复 + CodeBuddy 权限审批修正（PreToolUse.requires_approval）+ Gongfeng Copilot 支持 + fork 自动化发布 + ci.yml 远端兜底流水线。
 
@@ -136,6 +136,10 @@ clawd-on-desk/
 21. **`main.js EXT_VERSION` 必须与 `extensions/vscode/package.json.version` lockstep**。
     - **坑**：`EXT_VERSION` 停在 `0.1.0` 而扩展 package.json 已 bump 到 `0.1.1`，导致 commit `eaeea32` 的 `onStartupFinished` 修复从未下发给已装用户（版本号相等时 `installTerminalFocusExtension` 跳过覆盖）。
     - **规避**：本次已同步为 `0.1.1`，并新增 `test/terminal-focus-extension-install.test.js` 断言两者一致，防止再次漂移。
+22. **`auto-tag.yml`（GITHUB_TOKEN 建 tag）抢跑会击穿"显式 push tag 触发 build.yml"，导致打包流水线不触发**。
+    - **坑**：v0.7.15 发版时，`git push origin main` 后 `auto-tag.yml` 立刻自动创建了 `v0.7.15` 附注 tag（指向正确 release commit `0cf4b1c`）；随后开发者显式 `git push origin v0.7.15` 被 `! [rejected] (already exists)` 拒绝。更关键：`build.yml` **没有**被这个 tag 触发——`gh run list --workflow build.yml` 里最新仍是 v0.7.14。
+    - **根因**：GitHub Actions 防递归机制——用默认 `GITHUB_TOKEN` 在 workflow 里创建/推送的 tag **不会**再触发其它由 `push: tags` 监听的 workflow。auto-tag 用的就是 `GITHUB_TOKEN`，所以它建的 tag 是"哑"的，规则 §三 依赖的"显式 push tag → 触发 build.yml"兜底被 auto-tag 抢跑后失效（显式 push 因 tag 已存在被拒，等于没 push）。对比 v0.7.14 的 build.yml 是 `event=push headBranch=v0.7.14` 触发的——那次 tag 是开发者本人凭证 push 的，才会级联。
+    - **规避**：发版打 tag 后**必须显式核对 `gh run list --workflow build.yml` 是否出现本 tag 的运行**；若没有（被 auto-tag 抢跑），立即用 `gh workflow run build.yml --ref v<x.y.z>` 手动触发（release job 判据是 `startsWith(github.ref,'refs/tags/v')`，workflow_dispatch + `--ref v<tag>` 下 `github.ref_name=v<tag>`，会正常校验 release note 并建 Release）。切勿假设 auto-tag 会顺带把包也打了。→ 待反向修补规则 §三 step 5/6。
 
 ---
 
