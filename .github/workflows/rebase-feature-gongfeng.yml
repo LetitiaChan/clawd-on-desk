@@ -22,7 +22,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # PAT is required: rebasing main onto the feature branch replays commits
+          # that touch .github/workflows/*, and the default GITHUB_TOKEN (GitHub App
+          # identity) is refused by GitHub when a push creates/updates workflow files
+          # ("without `workflows` permission"). Fall back to GITHUB_TOKEN so the rebase
+          # step still runs (the push will simply fail as before if no PAT is set).
+          token: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
 
       - name: Configure git identity
         run: |
@@ -76,7 +81,7 @@ jobs:
       - name: Open issue on conflict
         if: steps.rebase.outputs.result == 'conflict'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
         run: |
           MAIN_SHORT=$(git rev-parse --short "origin/${BASE_BRANCH}")
           FEAT_SHORT=$(git rev-parse --short "origin/${FEATURE_BRANCH}")
