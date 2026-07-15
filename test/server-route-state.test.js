@@ -152,6 +152,21 @@ describe("server-route-state POST", () => {
     ]]);
   });
 
+  it("accepts editor=codebuddy in metadata", async () => {
+    const res = await callStatePost(JSON.stringify({
+      state: "working",
+      session_id: "cb-sid",
+      editor: "codebuddy",
+      source_pid: 500,
+      pid_chain: [500, 600],
+      agent_id: "codebuddy",
+    }));
+
+    assert.strictEqual(res.statusCode, 200);
+    const meta = res.calls.updateSession[0][3];
+    assert.strictEqual(meta.editor, "codebuddy");
+  });
+
   it("uses basename for explicit svg state overrides", async () => {
     const res = await callStatePost(JSON.stringify({
       state: "working",

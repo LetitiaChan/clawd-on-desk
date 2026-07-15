@@ -70,7 +70,7 @@ function handleStatePost(req, res, options) {
       const source_pid = Number.isFinite(data.source_pid) && data.source_pid > 0 ? Math.floor(data.source_pid) : null;
       const wtHwnd = normalizeHwndString(data.wt_hwnd ?? data.wtHwnd);
       const cwd = typeof data.cwd === "string" ? data.cwd : "";
-      const editor = (data.editor === "code" || data.editor === "cursor") ? data.editor : null;
+      const editor = (data.editor === "code" || data.editor === "cursor" || data.editor === "codebuddy") ? data.editor : null;
       const pidChain = Array.isArray(data.pid_chain) ? data.pid_chain.filter(n => Number.isFinite(n) && n > 0) : null;
       const rawAgentPid = data.agent_pid ?? data.claude_pid ?? data.cursor_pid;
       const agentPid = Number.isFinite(rawAgentPid) && rawAgentPid > 0 ? Math.floor(rawAgentPid) : null;
