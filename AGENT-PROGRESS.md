@@ -51,11 +51,13 @@ Claude Code、CodeBuddy、Codex、Copilot CLI、Cursor Agent、Gemini CLI、Gong
 
 ## 三、待实施的变更
 
-> **v0.7.15 发版预备（工作树未提交）**，包含两批 CodeBuddy 改动：
-> 1. 已 commit（`744e811`、`5ce1580`）：CN build 进程名识别、terminal-focus、editor 白名单、hook error handling 等。
-> 2. 本会话新增（未 commit）：CodeBuddy **IDE + CLI 权限双路径**——`codebuddy-install.js` 注册 `PermissionRequest` HTTP hook 驱动 CLI 路径、URL reconcile 到运行时端口、仅 scrub 死 command hook；`codebuddy-hook.js`/`integration-sync.js` 配套；CHANGELOG/release-v0.7.15.md 已修正过度声称。测试 `npm test` 2680 通过。
+> **v0.7.15 已发版完成（`0cf4b1c`，tag `v0.7.15`，Release 已 published）**：
+> - CN build 进程名识别、terminal-focus、editor 白名单、hook error handling（`744e811`、`5ce1580`）。
+> - CodeBuddy **IDE + CLI 权限双路径**：`codebuddy-install.js` 注册 `PermissionRequest` HTTP hook 驱动 CLI、URL reconcile 到运行时端口、仅 scrub 死 command hook；`codebuddy-hook.js`/`integration-sync.js` 配套；bundle 实证固化「IDE `requires_approval` 仅 `execute_command`、删除/改文件不可拦截」。
+> - CI 全绿（ci.yml @ `0cf4b1c` ✅；build.yml 三平台 + release ✅），三平台 x64+arm64 资产齐全。
+> - **CLI 端气泡已真机验证 OK**（`PermissionRequest` 在确认前 fire、气泡正常弹出）。
 >
-> 收尾待办：按规则三 commit（`package.json`+`CHANGELOG.md`+`docs/releases/release-v0.7.15.md`+源码/测试）→ push main → 显式 `git push origin v0.7.15` → 盯 CI 三平台出包 → **CLI 端真机验证气泡**。
+> 当前无未决发版待办。
 
 ---
 
@@ -125,7 +127,7 @@ clawd-on-desk/
     - **实证收紧（IDE bundle 反查）**：`requires_approval` 在 IDE 本体 `resources\app\out\codebuddy\main.js` + `extensions\genie\...` 里**仅**是 `execute_command`（enum `EXECUTE_COMMAND`）一个工具的参数（schema：`execute_command:{command,requires_approval}`；工具→参数映射表里只有 `EXECUTE_COMMAND→["command","requires_approval"]`）。删除工具是 `delete_file`（enum `DELETE_FILES`，参数仅 `["filePath"]`），与 `write_to_file`/`append_to_file`/`replace_in_file` 同属 `changeFileTools`，由 IDE **自己的文件变更确认 UI（diff/approve）** 拦截，**结构上不携带 `requires_approval`**。→ 结论：`codebuddy-hook.js` 的 `wantsApproval()` 对删除/改文件类操作**永远为 false**（`tool_input` 里根本没这个字段），IDE 路径的气泡拦截**仅对 `execute_command` 一个工具可能生效**，对 delete/write/append/replace 是结构性不可达，而非概率问题。
     - **CLI**（`codebuddy` 命令 = Claude Code fork `@tencent-ai/codebuddy-code`）**有**完整的标准 Claude Code hook 集（14 个，含真 `PermissionRequest`），在需审批工具（主要 Bash）执行前 fire 阻塞式 `PermissionRequest`。bundle 反查证据：`requires_approval` 在 CLI bundle 中 0 命中；`PermissionRequest` 51 处、`type:"http"` 支持。
     - **坑（历史）**：v0.7.15 初版基于「CodeBuddy 只有 IDE、权限走 requires_approval」的假设，把 CLI 唯一能用的 `PermissionRequest` HTTP hook 主动删掉了——导致 IDE（TerminalExecutor 在 hook 前确认、`requires_approval` 几乎恒 false）和 CLI 两条路径都弹不出气泡。`PreToolUse` 若返回旧格式 `{"decision":"allow"}` 也会被 IDE 解析为 `permissionDecision=none` → `default_allow` 直接放行。
-    - **规避（现方案：IDE + CLI 双路径）**：`codebuddy-hook.js` 只拦截 `requires_approval===true` 的 `PreToolUse`（IDE 路径，best-effort，且见上：**仅 `execute_command` 一个工具会带该字段**，删除/改文件类拦不到），阻塞转发 `/permission` 并把 `decision.behavior` 转成 `permissionDecision`；`codebuddy-install.js` 额外注册 `PermissionRequest` HTTP hook（→ `/permission`，镜像 Claude Code `HTTP_HOOKS`）驱动 CLI 路径，在 IDE 里是无害死配置。installer 不再删该 HTTP hook（改为把 URL reconcile 到运行时端口），只 scrub 遗留的死 *command* hook。不可达/无决策/DND/禁用一律回退。`integration-sync.js` 已把运行时端口线程化进 CodeBuddy sync。诊断锚点：IDE 日志 `...\CodeBuddy CN\logs\...\clawd-on-desk__*.log` 的 `[ToolHookExecutor] PreToolUse hook result` / `[beforeExecute] Permission decision`；CLI 端需真机跑一次危险命令确认 `PermissionRequest` 在确认前 fire、气泡能弹（端到端仍待验证）。
+    - **规避（现方案：IDE + CLI 双路径）**：`codebuddy-hook.js` 只拦截 `requires_approval===true` 的 `PreToolUse`（IDE 路径，best-effort，且见上：**仅 `execute_command` 一个工具会带该字段**，删除/改文件类拦不到），阻塞转发 `/permission` 并把 `decision.behavior` 转成 `permissionDecision`；`codebuddy-install.js` 额外注册 `PermissionRequest` HTTP hook（→ `/permission`，镜像 Claude Code `HTTP_HOOKS`）驱动 CLI 路径，在 IDE 里是无害死配置。installer 不再删该 HTTP hook（改为把 URL reconcile 到运行时端口），只 scrub 遗留的死 *command* hook。不可达/无决策/DND/禁用一律回退。`integration-sync.js` 已把运行时端口线程化进 CodeBuddy sync。诊断锚点：IDE 日志 `...\CodeBuddy CN\logs\...\clawd-on-desk__*.log` 的 `[ToolHookExecutor] PreToolUse hook result` / `[beforeExecute] Permission decision`；**CLI 端已真机验证（v0.7.15）：`PermissionRequest` 在确认前 fire、气泡正常弹出。**
 19. **CodeBuddy 有两套独立目录，别混用**：`~/.codebuddy/` 是 **CLI agent** 数据目录（无 `extensions/` 子目录）；`~/.codebuddycn/extensions/` 才是 **CodeBuddy CN IDE** 的用户扩展目录（VS Code fork，dataFolderName=`.codebuddycn`）。
     - **坑**：跳转终端对 CodeBuddy IDE 无效，一度以为要往 `~/.codebuddy/` 装扩展。
     - **根因**：terminal-tab 精确聚焦依赖 VS Code 扩展 `clawd.clawd-terminal-focus`，而 IDE 只读 `~/.codebuddycn/extensions/`；旧 `installTerminalFocusExtension` 的 targets 只含 `.vscode`/`.cursor`，CodeBuddy IDE 从未被下发扩展。
