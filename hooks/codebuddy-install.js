@@ -35,6 +35,12 @@ const CODEBUDDY_HOOK_EVENTS = [
 // (both our command hook and the legacy HTTP /permission hook). Older installs
 // wired permission approval to this event, which CodeBuddy never triggers.
 // Returns the number of removed entries.
+//
+// SAFETY: This only removes entries whose command contains MARKER or whose URL
+// contains HTTP_MARKER — third-party hooks are preserved. If a future CodeBuddy
+// IDE version adds PermissionRequest support and Clawd wants to re-enable it,
+// remove this cleanup call from the install flow and re-add the event to the
+// desired hooks list in ensureHookEntries().
 function cleanupStalePermissionRequestHooks(settings) {
   const entries = settings.hooks && settings.hooks.PermissionRequest;
   if (!Array.isArray(entries)) return 0;

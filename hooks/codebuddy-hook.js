@@ -34,17 +34,33 @@ const HOOK_MAP = {
   PreCompact:       { state: "sweeping",     event: "PreCompact" },
 };
 
+// CodeBuddy ships two Windows builds with DIFFERENT executable names:
+//   - International: "CodeBuddy.exe"      → snapshot name "codebuddy.exe"
+//   - CN (国内版):    "CodeBuddy CN.exe"   → snapshot name "codebuddy cn.exe"
+// Windows process names in the snapshot are lower-cased (shared-process.js), so
+// list the lower-cased variants (including the space) here. macOS/Linux comm
+// names are likewise lower-cased before matching.
+const CODEBUDDY_PROCESS_NAMES = {
+  win: ["codebuddy.exe", "codebuddy cn.exe"],
+  mac: ["codebuddy", "codebuddy cn"],
+  linux: ["codebuddy", "codebuddy cn"],
+};
+
 const config = getPlatformConfig({
-  extraTerminals: { win: ["codebuddy.exe"] },
+  extraTerminals: { win: CODEBUDDY_PROCESS_NAMES.win },
   extraEditors: {
-    win: { "codebuddy.exe": "codebuddy" },
-    mac: { "codebuddy": "codebuddy" },
-    linux: { "codebuddy": "codebuddy" },
+    win: { "codebuddy.exe": "codebuddy", "codebuddy cn.exe": "codebuddy" },
+    mac: { "codebuddy": "codebuddy", "codebuddy cn": "codebuddy" },
+    linux: { "codebuddy": "codebuddy", "codebuddy cn": "codebuddy" },
   },
   extraEditorPathChecks: [["codebuddy", "codebuddy"]],
 });
 const resolve = createPidResolver({
-  agentNames: { win: new Set(["codebuddy.exe"]), mac: new Set(["codebuddy"]), linux: new Set(["codebuddy"]) },
+  agentNames: {
+    win: new Set(CODEBUDDY_PROCESS_NAMES.win),
+    mac: new Set(CODEBUDDY_PROCESS_NAMES.mac),
+    linux: new Set(CODEBUDDY_PROCESS_NAMES.linux),
+  },
   platformConfig: config,
 });
 
@@ -200,6 +216,11 @@ function main() {
       process.stdout.write("{}\n");
       process.exit(0);
     });
+  }).catch(() => {
+    // Graceful fallback: if stdin read or JSON parse fails, emit non-blocking
+    // empty output so the IDE does not hang waiting for hook response.
+    process.stdout.write("{}\n");
+    process.exit(0);
   });
 }
 
@@ -208,6 +229,8 @@ if (require.main === module) main();
 module.exports = {
   HOOK_MAP,
   CODEBUDDY_PERMISSION_TIMEOUT_MS,
+  CODEBUDDY_PROCESS_NAMES,
+  config,
   wantsApproval,
   buildPreToolUseOutput,
   parsePermissionResponse,

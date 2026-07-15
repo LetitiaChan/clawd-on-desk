@@ -20,9 +20,10 @@ module.exports = {
     PreToolUse:       "working",
     PostToolUse:      "working",
     Stop:             "attention",
-    PermissionRequest:"notification",
     Notification:     "notification",
     PreCompact:       "sweeping",
+    // NOTE: CodeBuddy IDE does NOT emit PermissionRequest — permission approval
+    // is handled entirely via PreToolUse's requires_approval + permissionDecision.
   },
   capabilities: {
     httpHook: true,

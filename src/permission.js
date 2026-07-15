@@ -1371,9 +1371,20 @@ function cleanup() {
   if (typeof unsubscribeShortcuts === "function") {
     try { unsubscribeShortcuts(); } catch {}
   }
-  // Clean up all pending permission requests. Codex gets no-decision so its
-  // native approval flow can continue; Claude/CodeBuddy get explicit deny so
-  // they don't hang while the app is quitting.
+  // Clean up all pending permission requests on app quit.
+  //
+  // Why "deny" for CC/CodeBuddy (not socket destroy like dismiss/autoclose)?
+  // On quit the Node process is about to terminate — a socket destroy may race
+  // with GC and the hook process may never observe the FIN, leaving it blocked
+  // until its own timeout fires. An explicit "deny" response guarantees the
+  // hook script receives a well-formed JSON answer, exits immediately, and the
+  // IDE treats it as a user rejection (safe — the user chose to quit Clawd,
+  // implying they're handling approval themselves in the IDE's built-in UI).
+  //
+  // Contrast with dismissInteractivePermissionWithoutDecision (autoclose /
+  // DND / agent-disabled) where socket destroy is correct: Clawd is still
+  // running and TCP teardown is reliable, and the hooks doc defines connection
+  // failure as non-blocking (IDE shows its own prompt without logging a deny).
   for (const perm of [...pendingPermissions]) {
     if (perm._delayTimer) clearTimeout(perm._delayTimer);
     if (perm.autoExpireTimer) clearTimeout(perm.autoExpireTimer);

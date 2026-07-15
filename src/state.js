@@ -1153,9 +1153,9 @@ function detectRunningAgentProcesses(callback) {
   const { execFile, exec } = require("child_process");
   if (process.platform === "win32") {
     const psScript =
-      "$names = 'claude.exe','codex.exe','copilot.exe','gemini.exe','codebuddy.exe','kiro-cli.exe','kimi.exe','opencode.exe','pi.exe','hermes.exe'; " +
+      "$names = 'claude.exe','codex.exe','copilot.exe','gemini.exe','codebuddy.exe','CodeBuddy.exe','CodeBuddy CN.exe','kiro-cli.exe','kimi.exe','opencode.exe','pi.exe','hermes.exe'; " +
       "$match = Get-CimInstance Win32_Process | Where-Object { " +
-        "$names -contains $_.Name -or ($_.Name -eq 'node.exe' -and $_.CommandLine -like '*claude-code*') " +
+        "$names -icontains $_.Name -or ($_.Name -eq 'node.exe' -and $_.CommandLine -like '*claude-code*') " +
       "} | Select-Object -First 1; " +
       "if ($match) { $match.ProcessId }";
     execFile(
@@ -1165,7 +1165,7 @@ function detectRunningAgentProcesses(callback) {
       (err, stdout) => done(!err && /\d+/.test(stdout))
     );
   } else {
-    exec("pgrep -f 'claude-code|codex|copilot|codebuddy|kimi|@earendil-works/pi-coding-agent|pi-coding-agent/dist/cli\\.js' || pgrep -x 'gemini' || pgrep -x 'kiro-cli' || pgrep -x 'opencode' || pgrep -x 'hermes'", { timeout: 3000 },
+    exec("pgrep -f 'claude-code|codex|copilot|codebuddy|kimi|@earendil-works/pi-coding-agent|pi-coding-agent/dist/cli\\.js' || pgrep -x 'gemini' || pgrep -x 'kiro-cli' || pgrep -x 'opencode' || pgrep -x 'hermes' || pgrep -x 'CodeBuddy'", { timeout: 3000 },
       (err) => done(!err)
     );
   }
