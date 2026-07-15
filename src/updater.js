@@ -43,9 +43,20 @@ function getErrorMessage(err) {
   return String(err.message || err).trim() || "Unknown error";
 }
 
+function isRateLimitedError(err) {
+  if (!err) return false;
+  if (err.rateLimited) return true;
+  const text = String(err.message || err).toLowerCase();
+  return text.includes("rate limit") ||
+    text.includes("403") ||
+    text.includes("429") ||
+    text.includes("forbidden");
+}
+
 function classifyFailureType(reason, fallback = "Update Failed") {
   const text = String(reason || "").toLowerCase();
   if (text.includes("dirty worktree") || text.includes("uncommitted") || text.includes("modified")) return "Dirty Worktree";
+  if (text.includes("rate limit") || text.includes("403") || text.includes("429") || text.includes("forbidden")) return "Rate Limited";
   if (text.includes("timed out") || text.includes("network") || text.includes("github api")) return "Network Error";
   if (text.includes("npm install")) return "Dependency Install Failed";
   if (text.includes("git pull")) return "Git Pull Failed";
@@ -195,18 +206,25 @@ function initUpdater(ctx, deps = {}) {
       detail: typeof report.detail === "string" ? report.detail : "",
     });
     pulseState("error");
-    return showBubble({
+    const actions = [];
+    if (report.allowOpenReleases) {
+      actions.push({ id: "openReleases", label: t("openReleasePage", "Open Release Page"), variant: "primary" });
+    }
+    actions.push({ id: "dismiss", label: t("dismiss", "Dismiss"), variant: "secondary" });
+    const action = await showBubble({
       mode: "error",
       title: t("updateError", "Update Error"),
       message: report.message || t("updateErrorMsg", "Failed to check for updates. Please try again later."),
       detail,
-      actions: [
-        { id: "dismiss", label: t("dismiss", "Dismiss"), variant: "secondary" },
-      ],
-      defaultAction: "dismiss",
+      actions,
+      defaultAction: report.allowOpenReleases ? "openReleases" : "dismiss",
       lang: ctx.lang || "en",
       requireAction: true,
     });
+    if (action === "openReleases") {
+      try { shell.openExternal(RELEASES_LATEST_URL); } catch {}
+    }
+    return action;
   }
 
   async function showUpToDateBubble(version) {
@@ -276,6 +294,21 @@ path: "/repos/LetitiaChan/clawd-on-desk/releases/latest",
         res.on("end", () => {
           if (res.statusCode !== 200) {
             if (res.statusCode === 404) return reject(new Error("No releases found"));
+            if (res.statusCode === 403 || res.statusCode === 429) {
+              const headers = res.headers || {};
+              const remaining = headers["x-ratelimit-remaining"] != null
+                ? headers["x-ratelimit-remaining"]
+                : headers["X-RateLimit-Remaining"];
+              // GitHub throttles anonymous API calls to 60/hr per IP; a 403 with
+              // no remaining quota (or a 429) is rate limiting, not a network fault.
+              const rateLimited = res.statusCode === 429 || remaining == null || String(remaining) === "0";
+              const err = new Error(rateLimited
+                ? `GitHub API rate limit exceeded (${res.statusCode})`
+                : `GitHub API access forbidden (${res.statusCode})`);
+              err.rateLimited = rateLimited;
+              err.updateFailureType = "Rate Limited";
+              return reject(err);
+            }
             return reject(new Error(`GitHub API returned ${res.statusCode}`));
           }
           try {
@@ -678,14 +711,21 @@ path: "/repos/LetitiaChan/clawd-on-desk/releases/latest",
         updateStatus = "error";
         rebuildMenus();
         clearOverlay();
+        const rateLimited = !failedWhileDownloading && isRateLimitedError(err);
         await showErrorBubble({
           failureType: classifyFailureType(err.message),
           operation: failedWhileDownloading ? "Download Update" : "Check for Updates",
           reason: getErrorMessage(err),
-          nextStep: failedWhileDownloading
-            ? "Check your network connection and try downloading again."
-            : "Check your network connection and try again.",
+          nextStep: rateLimited
+            ? "GitHub limits anonymous update checks per hour. Wait a while, or open the release page to download manually."
+            : failedWhileDownloading
+              ? "Check your network connection and try downloading again."
+              : "Check your network connection and try again.",
           detail: getErrorMessage(err),
+          message: rateLimited
+            ? t("updateRateLimitMsg", "GitHub is rate limiting update checks. Please try again later, or open the release page to download manually.")
+            : undefined,
+          allowOpenReleases: rateLimited,
         });
       }
     });
@@ -724,12 +764,19 @@ path: "/repos/LetitiaChan/clawd-on-desk/releases/latest",
       rebuildMenus();
       clearOverlay();
       if (manual) {
+        const rateLimited = isRateLimitedError(err);
         await showErrorBubble({
-          failureType: classifyFailureType(err.message),
+          failureType: err.updateFailureType || classifyFailureType(err.message),
           operation: "Check for Updates",
           reason: getErrorMessage(err),
-          nextStep: "Check your network connection and try again.",
+          nextStep: rateLimited
+            ? "GitHub limits anonymous update checks per hour. Wait a while, or open the release page to download manually."
+            : "Check your network connection and try again.",
           detail: getErrorMessage(err),
+          message: rateLimited
+            ? t("updateRateLimitMsg", "GitHub is rate limiting update checks. Please try again later, or open the release page to download manually.")
+            : undefined,
+          allowOpenReleases: rateLimited,
         });
       }
       return;
@@ -836,5 +883,7 @@ module.exports.__test = {
   findWindowsArm64InstallerAsset,
   formatVersionForMessage,
   isUpdate404Error,
+  isRateLimitedError,
+  classifyFailureType,
   shouldPromptNativeArm64,
 };

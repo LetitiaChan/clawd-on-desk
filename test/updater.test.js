@@ -332,6 +332,75 @@ describe("updater visual flow", () => {
     assert.strictEqual(menuLabels[menuLabels.length - 1], "Check for Updates");
   });
 
+  it("treats a GitHub 403 rate limit as rate-limited and offers the release page", async () => {
+    const bubbles = [];
+    const appliedStates = [];
+    const openedUrls = [];
+    const ctx = makeCtx({
+      applyState: (state) => appliedStates.push(state),
+      showUpdateBubble: async (payload) => {
+        bubbles.push(payload);
+        if (payload.mode === "error") return "openReleases";
+        return payload.defaultAction || null;
+      },
+    });
+    const updater = initUpdater(ctx, makeDeps({
+      shell: { openExternal(url) { openedUrls.push(url); } },
+      httpsGetImpl: (options, cb) => {
+        const res = {
+          statusCode: 403,
+          headers: { "x-ratelimit-remaining": "0" },
+          on(event, handler) {
+            if (event === "data") handler(Buffer.from("{}"));
+            if (event === "end") handler();
+            return this;
+          },
+        };
+        cb(res);
+        return { on() { return this; }, setTimeout() {} };
+      },
+    }));
+
+    await updater.checkForUpdates(true);
+
+    assert.deepStrictEqual(bubbles.map((bubble) => bubble.mode), ["checking", "error"]);
+    assert.ok(appliedStates.includes("error"));
+    assert.match(bubbles[1].detail, /Failure Type: Rate Limited/);
+    assert.match(bubbles[1].detail, /rate limit/i);
+    assert.ok(bubbles[1].actions.some((action) => action.id === "openReleases"));
+    assert.strictEqual(bubbles[1].defaultAction, "openReleases");
+    assert.strictEqual(openedUrls[0], "https://github.com/LetitiaChan/clawd-on-desk/releases/latest");
+  });
+
+  it("does not treat a non-403 network failure as rate limited", async () => {
+    const bubbles = [];
+    const ctx = makeCtx({
+      showUpdateBubble: async (payload) => {
+        bubbles.push(payload);
+        return payload.defaultAction || null;
+      },
+    });
+    const updater = initUpdater(ctx, makeDeps({
+      httpsGetImpl: () => {
+        const req = {
+          on(event, handler) {
+            if (event === "error") process.nextTick(() => handler(new Error("network down")));
+            return this;
+          },
+          setTimeout() {},
+        };
+        return req;
+      },
+    }));
+
+    await updater.checkForUpdates(true);
+
+    assert.deepStrictEqual(bubbles.map((bubble) => bubble.mode), ["checking", "error"]);
+    assert.doesNotMatch(bubbles[1].detail, /Rate Limited/);
+    assert.ok(!bubbles[1].actions.some((action) => action.id === "openReleases"));
+    assert.strictEqual(bubbles[1].defaultAction, "dismiss");
+  });
+
   it("shows error state and detail bubble when GitHub API check fails", async () => {
     const visualStates = [];
     const appliedStates = [];
@@ -876,5 +945,20 @@ describe("updater Windows ARM64 migration helpers", () => {
     });
 
     assert.strictEqual(asset.browser_download_url, "arm64");
+  });
+
+  it("classifies GitHub 403/429 responses as rate limited", () => {
+    const { classifyFailureType, isRateLimitedError } = initUpdater.__test;
+
+    assert.strictEqual(classifyFailureType("GitHub API rate limit exceeded (403)"), "Rate Limited");
+    assert.strictEqual(classifyFailureType("GitHub API access forbidden (403)"), "Rate Limited");
+    assert.strictEqual(classifyFailureType("GitHub API returned 429"), "Rate Limited");
+    assert.strictEqual(classifyFailureType("network down"), "Network Error");
+    assert.strictEqual(classifyFailureType("GitHub API returned 500"), "Network Error");
+
+    assert.strictEqual(isRateLimitedError({ rateLimited: true }), true);
+    assert.strictEqual(isRateLimitedError(new Error("GitHub API rate limit exceeded (403)")), true);
+    assert.strictEqual(isRateLimitedError(new Error("network down")), false);
+    assert.strictEqual(isRateLimitedError(null), false);
   });
 });
