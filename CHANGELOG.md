@@ -11,10 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+
+## [0.7.16] - 2026-07-15
+
+> Tag: `v0.7.16` · Release notes: [`docs/releases/release-v0.7.16.md`](docs/releases/release-v0.7.16.md)
+
 ### Fixed
 - **"Check for Updates" misreported GitHub API rate limiting (HTTP 403) as a generic "Network Error".** Packaged builds check for updates through the anonymous GitHub API (`api.github.com/.../releases/latest`), which GitHub throttles to 60 requests/hour per IP. When that quota is exhausted the API returns `403`, but `fetchLatestRelease()` folded it into the catch-all `GitHub API returned <status>` message, which `classifyFailureType` then labeled "Network Error" with a "Check your network connection and try again." next step — misleading users whose network is perfectly fine. Fix: `fetchLatestRelease()` now inspects `403`/`429` responses (and the `x-ratelimit-remaining` header) and raises a dedicated rate-limit error; `classifyFailureType` returns a new **"Rate Limited"** type; the error bubble shows a rate-limit-specific message plus an **"Open Release Page"** action so users can download manually. The same handling is applied to the `electron-updater` `latest.yml` error path. Added `updateRateLimitMsg` / `openReleasePage` strings in all 5 UI locales and regression tests.
 
 ---
+
 
 
 ## [0.7.15] - 2026-07-15
