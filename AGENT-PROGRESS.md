@@ -3,9 +3,9 @@
 > 本文件由 `.codebuddy/rules/project-continuity.mdc` 强制约束维护。
 > 每次会话启动时 Agent 会读取本文件恢复上下文；会话结束/完成重要里程碑时主动更新。
 >
-> **最后更新**：2026-07-15（会话：固化 `npm run release` 端到端发布流水线 + changesets/semantic-release 评估）
-> **当前 HEAD**：`48fe2be` (branch: `main`，已 push；ci.yml ✅ Win+Linux；未 bump 版本，build.yml/auto-tag.yml 不触发)
-> **package.json 版本**：`0.7.16`（未变；本次为内部工具链改动，非发版）
+> **最后更新**：2026-07-15（会话：修复 `Rebase feature/gongfeng onto main` workflow 每次 push 必失败——改用 PAT）
+> **当前 HEAD**：`26ac414` (branch: `main`，已 push；ci.yml ✅ Win+Linux + rebase workflow ✅ 已转绿；未 bump 版本，build.yml/auto-tag.yml 不触发)
+> **package.json 版本**：`0.7.16`（未变；本次为 CI 基建修复，非发版）
 > ⚠️ **构建约定**：本地不打包，所有 `electron-builder` 产出由 CI 完成。详见 `.codebuddy/rules/project-continuity.mdc`。
 
 ---
@@ -34,6 +34,8 @@ Claude Code、CodeBuddy、Codex、Copilot CLI、Cursor Agent、Gemini CLI、Gong
 
 | Commit | 说明 |
 |--------|------|
+| `26ac414` | fix(ci): `Rebase feature/gongfeng onto main` workflow 每次 push 到 main 必 failure——rebase 本身成功，但后续 `git push --force-with-lease` 被 GitHub 拒（*refusing to allow a GitHub App to create or update workflow ... without `workflows` permission*）：rebase 会 replay 触及 `.github/workflows/*` 的 main commit，默认 `GITHUB_TOKEN`（GitHub App 身份）无权 push workflow 文件。`sync-upstream.yml` 早已用 PAT 修过同类问题（`494026c`），rebase workflow 漏修。对齐成同样的 `secrets.PAT \|\| secrets.GITHUB_TOKEN`（checkout token + issue `GH_TOKEN`）；仓库已配 `PAT` secret，push 后该 workflow 立即从 failure → success（**HEAD**，ci.yml ✅ + rebase workflow ✅） |
+| `d6bb30d` | docs: refresh AGENT-PROGRESS after release-pipeline hardening (48fe2be) |
 | `48fe2be` | chore(release): 把 `npm run release` 固化成端到端流水线——补 step 9（`gh workflow run build.yml --ref v<x.y.z>` + `gh run list` 核对 CI，`--no-ci`/无 `gh` 时降级打印手动命令）、tag push 竞态兜底、CHANGELOG footer 自动续写、`patch/minor/major` 关键字 + `--yes` 非交互、真正零落盘 `--dry-run`、导出纯函数；新增 `test/release-script.test.js`；新增评估文档 `docs/investigations/release-automation-evaluation.md`（结论：保留 bespoke `release.js`，不上 semantic-release、暂缓 changesets）；顺手补齐 v0.7.16 漏更的 CHANGELOG footer + `.gitignore` 白名单（**HEAD**，ci.yml ✅） |
 | `d05adf7` | docs: correct AGENT-PROGRESS for v0.7.16 — CI publishes a non-draft (latest) Release, no manual Publish needed |
 | `4dccbd6` | release: v0.7.16（发版更新检查 403 限流误报修复；bump `package.json`、关闭 CHANGELOG `[Unreleased]`、新建 `docs/releases/release-v0.7.16.md` + 补 `.gitignore` 豁免）（tag `v0.7.16`） |
@@ -147,6 +149,10 @@ clawd-on-desk/
     - **坑**：v0.7.15 发版时，`git push origin main` 后 `auto-tag.yml` 立刻自动创建了 `v0.7.15` 附注 tag（指向正确 release commit `0cf4b1c`）；随后开发者显式 `git push origin v0.7.15` 被 `! [rejected] (already exists)` 拒绝。更关键：`build.yml` **没有**被这个 tag 触发——`gh run list --workflow build.yml` 里最新仍是 v0.7.14。
     - **根因**：GitHub Actions 防递归机制——用默认 `GITHUB_TOKEN` 在 workflow 里创建/推送的 tag **不会**再触发其它由 `push: tags` 监听的 workflow。auto-tag 用的就是 `GITHUB_TOKEN`，所以它建的 tag 是"哑"的，规则 §三 依赖的"显式 push tag → 触发 build.yml"兜底被 auto-tag 抢跑后失效（显式 push 因 tag 已存在被拒，等于没 push）。对比 v0.7.14 的 build.yml 是 `event=push headBranch=v0.7.14` 触发的——那次 tag 是开发者本人凭证 push 的，才会级联。
     - **规避**：发版打 tag 后**必须显式核对 `gh run list --workflow build.yml` 是否出现本 tag 的运行**；若没有（被 auto-tag 抢跑），立即用 `gh workflow run build.yml --ref v<x.y.z>` 手动触发（release job 判据是 `startsWith(github.ref,'refs/tags/v')`，workflow_dispatch + `--ref v<tag>` 下 `github.ref_name=v<tag>`，会正常校验 release note 并建 Release）。切勿假设 auto-tag 会顺带把包也打了。→ 待反向修补规则 §三 step 5/6。
+23. **workflow 里用默认 `GITHUB_TOKEN` push 触及 `.github/workflows/*` 的 commit 会被 GitHub 硬拒**（`refusing to allow a GitHub App to create or update workflow ... without` `workflows` `permission`）。
+    - **坑**：`Rebase feature/gongfeng onto main`（`rebase-feature-gongfeng.yml`）每次 push 到 main 都在最后一步 `git push --force-with-lease` failure（rebase 本身成功）。因 rebase 会把 main 上触及 workflow 文件的 commit replay 进 feature 分支，force-push 时命中该限制。
+    - **根因**：GitHub 安全策略——`GITHUB_TOKEN`（GitHub App 身份）即便 `permissions:` 全开也**无法**授予 `workflows` scope，故不能 push 任何 workflow 文件变更。只有带 `workflow` scope 的 PAT（或 GitHub App with workflow write）能推。这和 §六-22 同源（都是 `GITHUB_TOKEN` 的 workflow 相关限制）。
+    - **规避**：所有会 `git push` 且可能夹带 workflow 文件的 workflow 必须用 PAT。仓库已配 `PAT` secret，范式统一为 `token: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}`（`sync-upstream.yml` 早已如此，`494026c`）。修复 commit `26ac414` 已把 `rebase-feature-gongfeng.yml` 对齐。**将来新增任何 push 分支的 automation 时，默认走 PAT 模式**。
 
 ---
 
