@@ -3,9 +3,9 @@
 > 本文件由 `.codebuddy/rules/project-continuity.mdc` 强制约束维护。
 > 每次会话启动时 Agent 会读取本文件恢复上下文；会话结束/完成重要里程碑时主动更新。
 >
-> **最后更新**：2026-07-15（会话：v0.7.16 发版——更新检查 GitHub 403 限流误报修复）
-> **当前 HEAD**：`4dccbd6` (branch: `main`，已 push；tag `v0.7.16` 已触发 build.yml，三平台 ✅)
-> **package.json 版本**：`0.7.16`（已 commit + tag；CI 已产出**正式 Release**（`draft:false`），已是仓库 `latest` release，无需手动 Publish）
+> **最后更新**：2026-07-15（会话：固化 `npm run release` 端到端发布流水线 + changesets/semantic-release 评估）
+> **当前 HEAD**：`48fe2be` (branch: `main`，已 push；ci.yml ✅ Win+Linux；未 bump 版本，build.yml/auto-tag.yml 不触发)
+> **package.json 版本**：`0.7.16`（未变；本次为内部工具链改动，非发版）
 > ⚠️ **构建约定**：本地不打包，所有 `electron-builder` 产出由 CI 完成。详见 `.codebuddy/rules/project-continuity.mdc`。
 
 ---
@@ -34,7 +34,9 @@ Claude Code、CodeBuddy、Codex、Copilot CLI、Cursor Agent、Gemini CLI、Gong
 
 | Commit | 说明 |
 |--------|------|
-| `4dccbd6` | release: v0.7.16（发版更新检查 403 限流误报修复；bump `package.json`、关闭 CHANGELOG `[Unreleased]`、新建 `docs/releases/release-v0.7.16.md` + 补 `.gitignore` 豁免）（**HEAD**，tag `v0.7.16`） |
+| `48fe2be` | chore(release): 把 `npm run release` 固化成端到端流水线——补 step 9（`gh workflow run build.yml --ref v<x.y.z>` + `gh run list` 核对 CI，`--no-ci`/无 `gh` 时降级打印手动命令）、tag push 竞态兜底、CHANGELOG footer 自动续写、`patch/minor/major` 关键字 + `--yes` 非交互、真正零落盘 `--dry-run`、导出纯函数；新增 `test/release-script.test.js`；新增评估文档 `docs/investigations/release-automation-evaluation.md`（结论：保留 bespoke `release.js`，不上 semantic-release、暂缓 changesets）；顺手补齐 v0.7.16 漏更的 CHANGELOG footer + `.gitignore` 白名单（**HEAD**，ci.yml ✅） |
+| `d05adf7` | docs: correct AGENT-PROGRESS for v0.7.16 — CI publishes a non-draft (latest) Release, no manual Publish needed |
+| `4dccbd6` | release: v0.7.16（发版更新检查 403 限流误报修复；bump `package.json`、关闭 CHANGELOG `[Unreleased]`、新建 `docs/releases/release-v0.7.16.md` + 补 `.gitignore` 豁免）（tag `v0.7.16`） |
 | `6dfbb1b` | docs: refresh AGENT-PROGRESS after updater 403 rate-limit hotfix |
 | `9e192d1` | fix(updater): 将 GitHub 403/429 识别为限流而非网络错误，错误气泡提供「打开发布页」手动兜底（i18n 5 语言 + 回归测试） |
 | `0cf4b1c` | release: v0.7.15（CodeBuddy 双路径权限 + CN 识别/terminal-focus 修复 + hook 加固；固化 IDE `requires_approval` 仅 `execute_command`、删除/改文件不可拦截的 bundle 实证）（tag `v0.7.15`） |
