@@ -2,16 +2,31 @@
 // Clawd — CodeBuddy hook (stdin JSON with hook_event_name; stdout JSON for gating hooks)
 // Registered in ~/.codebuddy/settings.json by hooks/codebuddy-install.js
 //
-// CodeBuddy IDE uses a Claude Code-compatible hook format, but does NOT expose a
-// dedicated `PermissionRequest` event. Permission approval is carried entirely by
-// `PreToolUse`'s `permissionDecision` (allow/deny/ask). When the IDE wants to prompt
-// the user (its built-in command confirmation), the PreToolUse payload carries
-// `tool_input.requires_approval === true`. We intercept exactly those, forward them
-// to Clawd's blocking /permission endpoint (shared Claude Code branch), and translate
-// the returned `decision.behavior` back into `hookSpecificOutput.permissionDecision`.
-// Any failure (server unreachable, no-decision, DND/disabled connection drop, disabled
-// bubble) falls back to `permissionDecision:"ask"` so the IDE shows its own prompt — we
-// never decide on the user's behalf.
+// `codebuddy` settings.json is shared by two runtimes with two permission paths:
+//
+//   • CodeBuddy IDE — has NO dedicated `PermissionRequest` event. Approval is
+//     carried by `PreToolUse`'s `permissionDecision` (allow/deny/ask). When the IDE
+//     wants confirmation it sets `tool_input.requires_approval === true`; THIS script
+//     intercepts exactly those PreToolUse payloads, forwards them to Clawd's blocking
+//     /permission endpoint (shared Claude Code branch), and translates the returned
+//     `decision.behavior` back into `hookSpecificOutput.permissionDecision`.
+//     (Best-effort AND narrowly scoped: IDE-bundle inspection confirmed
+//     `requires_approval` exists ONLY on the `execute_command` tool schema. The
+//     delete tool (`delete_file`) and other file-change tools (write/append/
+//     replace) are `changeFileTools` gated by the IDE's own diff/approve UI and
+//     NEVER carry `requires_approval` — so wantsApproval() is always false for
+//     them and this path can only ever fire for `execute_command`, which the
+//     IDE's built-in TerminalExecutor usually confirms before the hook runs.)
+//
+//   • `codebuddy` CLI (Claude Code fork) — fires a real `PermissionRequest` hook,
+//     registered by codebuddy-install.js as a blocking HTTP hook that talks to
+//     /permission directly. That path does NOT flow through this script; here the
+//     CLI's PreToolUse only reports the "working" state (requires_approval is absent,
+//     so wantsApproval() is false and we defer with {}).
+//
+// Any failure on the IDE path (server unreachable, no-decision, DND/disabled
+// connection drop, disabled bubble) falls back to `permissionDecision:"ask"` so the
+// IDE shows its own prompt — we never decide on the user's behalf.
 
 const {
   postStateToRunningServer,

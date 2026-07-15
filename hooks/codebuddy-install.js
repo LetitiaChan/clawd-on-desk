@@ -5,21 +5,45 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { resolveNodeBin } = require("./server-config");
+const {
+  resolveNodeBin,
+  buildPermissionUrl,
+  readRuntimePort,
+  DEFAULT_SERVER_PORT,
+  SERVER_PORTS,
+  PERMISSION_PATH,
+} = require("./server-config");
 const { writeJsonAtomic, asarUnpackedPath, extractExistingNodeBin } = require("./json-utils");
 const MARKER = "codebuddy-hook.js";
-const HTTP_MARKER = "/permission";
+const HTTP_MARKER = PERMISSION_PATH; // "/permission"
 const DEFAULT_PARENT_DIR = path.join(os.homedir(), ".codebuddy");
 const DEFAULT_CONFIG_PATH = path.join(DEFAULT_PARENT_DIR, "settings.json");
 
-// CodeBuddy supported hook events (as of v1.16+).
-// NOTE: CodeBuddy IDE has NO dedicated `PermissionRequest` event. Permission
-// approval is carried by `PreToolUse`'s `permissionDecision` (allow/deny/ask):
-// codebuddy-hook.js intercepts PreToolUse payloads whose
-// `tool_input.requires_approval === true` and forwards them to Clawd's
-// /permission endpoint. Registering a `PermissionRequest` hook here (command or
-// HTTP) is dead config — the IDE never fires it. Any such entry left over from
-// older installs is scrubbed by cleanupStalePermissionRequestHooks() below.
+// `codebuddy` ships two distinct runtimes that BOTH read ~/.codebuddy/settings.json,
+// with two different permission-approval mechanisms:
+//
+//   1. CodeBuddy IDE (腾讯云代码助手扩展) — has NO dedicated `PermissionRequest`
+//      event. Approval is carried by `PreToolUse`'s `permissionDecision`
+//      (allow/deny/ask): the IDE sets `tool_input.requires_approval === true` on
+//      payloads it wants confirmed, and codebuddy-hook.js intercepts exactly those
+//      and forwards them to Clawd's /permission endpoint. (In practice
+//      `requires_approval` exists ONLY on the `execute_command` tool schema —
+//      the delete tool (`delete_file`) and other file-change tools are gated by
+//      the IDE's own diff/approve UI and never carry it — and even for
+//      `execute_command` the built-in TerminalExecutor usually confirms BEFORE
+//      the hook fires, so this path is best-effort only.)
+//
+//   2. `codebuddy` CLI (= a Claude Code fork, @tencent-ai/codebuddy-code) — is
+//      standard Claude Code and DOES fire a real `PermissionRequest` hook before a
+//      tool that needs approval runs (primarily Bash). We register it as a blocking
+//      HTTP hook pointing at Clawd's /permission endpoint, exactly like the Claude
+//      Code integration (hooks/install.js HTTP_HOOKS).
+//
+// The `PermissionRequest` HTTP hook is harmless dead config in the IDE (which never
+// fires it) and the enabling mechanism for the CLI. Both paths converge on the same
+// /permission endpoint. Older installs that wired a *command* hook to
+// `PermissionRequest` (which neither runtime uses) are scrubbed by
+// cleanupStalePermissionRequestCommandHooks() below.
 const CODEBUDDY_HOOK_EVENTS = [
   "SessionStart",
   "SessionEnd",
@@ -31,17 +55,82 @@ const CODEBUDDY_HOOK_EVENTS = [
   "PreCompact",
 ];
 
-// Remove Clawd-owned entries under the non-existent `PermissionRequest` event
-// (both our command hook and the legacy HTTP /permission hook). Older installs
-// wired permission approval to this event, which CodeBuddy never triggers.
+// HTTP hooks: PermissionRequest uses a bidirectional (blocking) HTTP hook for
+// permission decisions. Fired by the `codebuddy` CLI (Claude Code fork) for tools
+// needing approval (primarily Bash); dead config in the IDE. Mirrors the Claude
+// Code integration's HTTP_HOOKS.
+const HTTP_HOOKS = {
+  PermissionRequest: {
+    matcher: "",
+    hook: {
+      type: "http",
+      url: `http://127.0.0.1:${DEFAULT_SERVER_PORT}${HTTP_MARKER}`,
+      timeout: 600,
+    },
+  },
+};
+
+function getHookServerPort(explicitPort) {
+  return Number.isInteger(explicitPort) ? explicitPort : (readRuntimePort() || DEFAULT_SERVER_PORT);
+}
+
+// Is `url` a Clawd /permission endpoint on one of our loopback ports?
+function isClawdPermissionUrl(url) {
+  if (typeof url !== "string" || !url) return false;
+  try {
+    const parsed = new URL(url);
+    const port = Number(parsed.port);
+    return parsed.protocol === "http:"
+      && parsed.hostname === "127.0.0.1"
+      && parsed.pathname === HTTP_MARKER
+      && parsed.search === ""
+      && parsed.hash === ""
+      && parsed.username === ""
+      && parsed.password === ""
+      && Number.isInteger(port)
+      && SERVER_PORTS.includes(port);
+  } catch {
+    return false;
+  }
+}
+
+function isClawdPermissionHook(entry) {
+  return !!entry
+    && typeof entry === "object"
+    && entry.type === "http"
+    && typeof entry.url === "string"
+    && isClawdPermissionUrl(entry.url);
+}
+
+// Find Clawd's PermissionRequest HTTP hook (flat or nested) and reconcile its URL
+// to `expectedUrl` (e.g. when the runtime port changed). Returns whether one was
+// found and whether it changed.
+function syncPermissionHttpHook(entries, expectedUrl) {
+  let found = false;
+  let changed = false;
+  if (!Array.isArray(entries)) return { found, changed };
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object") continue;
+    if (isClawdPermissionHook(entry)) {
+      found = true;
+      if (entry.url !== expectedUrl) { entry.url = expectedUrl; changed = true; }
+    }
+    if (!Array.isArray(entry.hooks)) continue;
+    for (const h of entry.hooks) {
+      if (!isClawdPermissionHook(h)) continue;
+      found = true;
+      if (h.url !== expectedUrl) { h.url = expectedUrl; changed = true; }
+    }
+  }
+  return { found, changed };
+}
+
+// Remove ONLY Clawd-owned *command* hooks mistakenly registered under
+// `PermissionRequest` by older installs (neither the IDE nor the CLI fires a
+// command hook for that event — the CLI uses the HTTP hook below). Third-party
+// entries and Clawd's own PermissionRequest HTTP hook are preserved.
 // Returns the number of removed entries.
-//
-// SAFETY: This only removes entries whose command contains MARKER or whose URL
-// contains HTTP_MARKER — third-party hooks are preserved. If a future CodeBuddy
-// IDE version adds PermissionRequest support and Clawd wants to re-enable it,
-// remove this cleanup call from the install flow and re-add the event to the
-// desired hooks list in ensureHookEntries().
-function cleanupStalePermissionRequestHooks(settings) {
+function cleanupStalePermissionRequestCommandHooks(settings) {
   const entries = settings.hooks && settings.hooks.PermissionRequest;
   if (!Array.isArray(entries)) return 0;
 
@@ -51,12 +140,10 @@ function cleanupStalePermissionRequestHooks(settings) {
     if (!entry || typeof entry !== "object") { kept.push(entry); continue; }
 
     if (typeof entry.command === "string" && entry.command.includes(MARKER)) { removed++; continue; }
-    if (entry.type === "http" && typeof entry.url === "string" && entry.url.includes(HTTP_MARKER)) { removed++; continue; }
 
     if (Array.isArray(entry.hooks)) {
       const keptInner = entry.hooks.filter((h) => {
         if (h && typeof h.command === "string" && h.command.includes(MARKER)) { removed++; return false; }
-        if (h && h.type === "http" && typeof h.url === "string" && h.url.includes(HTTP_MARKER)) { removed++; return false; }
         return true;
       });
       if (keptInner.length > 0) { entry.hooks = keptInner; kept.push(entry); }
@@ -74,19 +161,23 @@ function cleanupStalePermissionRequestHooks(settings) {
 /**
  * Register Clawd hooks into ~/.codebuddy/settings.json
  * Uses Claude Code-compatible nested format: { matcher, hooks: [{ type, command }] }
+ * Registers command hooks for state events + a blocking PermissionRequest HTTP hook
+ * (used by the codebuddy CLI; dead config in the IDE).
  * @param {object} [options]
  * @param {boolean} [options.silent]
  * @param {string} [options.settingsPath]
- * @returns {{ added: number, skipped: number, updated: number }}
+ * @param {number} [options.port] - server port for the PermissionRequest HTTP hook URL
+ * @returns {{ added: number, skipped: number, updated: number, removed: number }}
  */
 function registerCodeBuddyHooks(options = {}) {
   const settingsPath = options.settingsPath || path.join(os.homedir(), ".codebuddy", "settings.json");
+  const hookPort = getHookServerPort(options.port);
 
   // Skip if ~/.codebuddy/ doesn't exist (CodeBuddy not installed)
   const codebuddyDir = path.dirname(settingsPath);
   if (!options.settingsPath && !fs.existsSync(codebuddyDir)) {
     if (!options.silent) console.log("Clawd: ~/.codebuddy/ not found — skipping CodeBuddy hook registration");
-    return { added: 0, skipped: 0, updated: 0 };
+    return { added: 0, skipped: 0, updated: 0, removed: 0 };
   }
 
   const hookScript = asarUnpackedPath(path.resolve(__dirname, "codebuddy-hook.js").replace(/\\/g, "/"));
@@ -170,10 +261,35 @@ function registerCodeBuddyHooks(options = {}) {
     changed = true;
   }
 
-  // Heal older installs that wired permission approval to the non-existent
-  // `PermissionRequest` event. Those command / HTTP hooks never fire, so drop them.
-  const removedStale = cleanupStalePermissionRequestHooks(settings);
+  // Heal older installs that wired permission approval to a *command* hook under
+  // `PermissionRequest`. Neither the IDE nor the CLI fires such a command hook, so
+  // drop it (the CLI path is served by the HTTP hook registered below).
+  const removedStale = cleanupStalePermissionRequestCommandHooks(settings);
   if (removedStale > 0) changed = true;
+
+  // Register the blocking PermissionRequest HTTP hook (CLI path; dead config in IDE).
+  for (const [event, { matcher, hook }] of Object.entries(HTTP_HOOKS)) {
+    if (!Array.isArray(settings.hooks[event])) {
+      settings.hooks[event] = [];
+      changed = true;
+    }
+
+    const desiredUrl = buildPermissionUrl(hookPort);
+    const httpSync = syncPermissionHttpHook(settings.hooks[event], desiredUrl);
+    if (httpSync.found) {
+      if (httpSync.changed) {
+        updated++;
+        changed = true;
+      } else {
+        skipped++;
+      }
+      continue;
+    }
+
+    settings.hooks[event].push({ matcher, hooks: [{ ...hook, url: desiredUrl }] });
+    added++;
+    changed = true;
+  }
 
   if (added > 0 || changed) {
     writeJsonAtomic(settingsPath, settings);
@@ -278,6 +394,9 @@ module.exports = {
   registerCodeBuddyHooks,
   unregisterCodeBuddyHooks,
   CODEBUDDY_HOOK_EVENTS,
+  HTTP_HOOKS,
+  isClawdPermissionHook,
+  isClawdPermissionUrl,
 };
 
 if (require.main === module) {

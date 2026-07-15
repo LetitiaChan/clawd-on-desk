@@ -3,9 +3,10 @@ const assert = require("node:assert");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { registerCodeBuddyHooks, CODEBUDDY_HOOK_EVENTS } = require("../hooks/codebuddy-install");
+const { registerCodeBuddyHooks, unregisterCodeBuddyHooks, CODEBUDDY_HOOK_EVENTS } = require("../hooks/codebuddy-install");
 
 const MARKER = "codebuddy-hook.js";
+const PERMISSION_URL = "http://127.0.0.1:23333/permission";
 const tempDirs = [];
 
 function makeTempSettingsFile(initial = {}) {
@@ -27,27 +28,27 @@ afterEach(() => {
 });
 
 describe("CodeBuddy hook installer", () => {
-  it("does not register a PermissionRequest event (IDE has none)", () => {
+  it("does not register PermissionRequest as a command event (state hooks only)", () => {
     assert.ok(!CODEBUDDY_HOOK_EVENTS.includes("PermissionRequest"));
     assert.strictEqual(CODEBUDDY_HOOK_EVENTS.length, 8);
   });
 
-  it("registers one command hook per supported event on fresh install", () => {
+  it("registers one command hook per state event + a PermissionRequest HTTP hook on fresh install", () => {
     const settingsPath = makeTempSettingsFile({});
     const result = registerCodeBuddyHooks({
       silent: true,
       settingsPath,
+      port: 23333,
       nodeBin: "/usr/local/bin/node",
     });
 
-    // 8 command hooks, no HTTP hook, no PermissionRequest event
-    assert.strictEqual(result.added, 8);
+    // 8 command hooks + 1 PermissionRequest HTTP hook
+    assert.strictEqual(result.added, 9);
     assert.strictEqual(result.skipped, 0);
     assert.strictEqual(result.updated, 0);
     assert.strictEqual(result.removed, 0);
 
     const settings = readJson(settingsPath);
-    assert.ok(!settings.hooks.PermissionRequest, "must not create PermissionRequest event");
 
     for (const event of CODEBUDDY_HOOK_EVENTS) {
       assert.ok(Array.isArray(settings.hooks[event]), `missing hooks for ${event}`);
@@ -60,21 +61,30 @@ describe("CodeBuddy hook installer", () => {
       assert.ok(entry.hooks[0].command.includes("/usr/local/bin/node"));
     }
 
-    // No HTTP hooks anywhere
-    for (const entries of Object.values(settings.hooks)) {
-      for (const entry of entries) {
+    // The ONLY HTTP hook lives under PermissionRequest, pointing at /permission.
+    assert.ok(Array.isArray(settings.hooks.PermissionRequest));
+    assert.strictEqual(settings.hooks.PermissionRequest.length, 1);
+    const httpEntry = settings.hooks.PermissionRequest[0];
+    assert.strictEqual(httpEntry.matcher, "");
+    assert.strictEqual(httpEntry.hooks[0].type, "http");
+    assert.strictEqual(httpEntry.hooks[0].url, PERMISSION_URL);
+    assert.strictEqual(httpEntry.hooks[0].timeout, 600);
+
+    // No HTTP hook leaks into the state events.
+    for (const event of CODEBUDDY_HOOK_EVENTS) {
+      for (const entry of settings.hooks[event]) {
         const inner = Array.isArray(entry.hooks) ? entry.hooks : [];
-        assert.ok(!inner.some((h) => h.type === "http"), "no HTTP hook should be registered");
+        assert.ok(!inner.some((h) => h.type === "http"), `no HTTP hook should be under ${event}`);
       }
     }
   });
 
   it("is idempotent on second run", () => {
     const settingsPath = makeTempSettingsFile({});
-    registerCodeBuddyHooks({ silent: true, settingsPath, nodeBin: "/usr/local/bin/node" });
+    registerCodeBuddyHooks({ silent: true, settingsPath, port: 23333, nodeBin: "/usr/local/bin/node" });
     const contentBefore = fs.readFileSync(settingsPath, "utf8");
 
-    const result = registerCodeBuddyHooks({ silent: true, settingsPath, nodeBin: "/usr/local/bin/node" });
+    const result = registerCodeBuddyHooks({ silent: true, settingsPath, port: 23333, nodeBin: "/usr/local/bin/node" });
 
     assert.strictEqual(result.added, 0);
     assert.strictEqual(result.updated, 0);
@@ -153,12 +163,12 @@ describe("CodeBuddy hook installer", () => {
     assert.ok(settings.hooks.PostToolUse[0].command.includes("/home/user/.volta/bin/node"));
   });
 
-  it("scrubs a legacy PermissionRequest HTTP hook left by older installs", () => {
+  it("preserves and syncs a Clawd PermissionRequest HTTP hook from older installs", () => {
     const settingsPath = makeTempSettingsFile({
       hooks: {
         PermissionRequest: [{
           matcher: "",
-          hooks: [{ type: "http", url: "http://127.0.0.1:23333/permission", timeout: 600 }],
+          hooks: [{ type: "http", url: "http://127.0.0.1:23335/permission", timeout: 600 }],
         }],
       },
     });
@@ -166,15 +176,20 @@ describe("CodeBuddy hook installer", () => {
     const result = registerCodeBuddyHooks({
       silent: true,
       settingsPath,
+      port: 23333,
       nodeBin: "/usr/local/bin/node",
     });
 
-    assert.ok(result.removed >= 1, "should report removed stale entries");
+    // The existing HTTP hook is reconciled to the active port, not removed/duplicated.
+    assert.strictEqual(result.removed, 0, "must not remove the CLI's PermissionRequest HTTP hook");
+    assert.ok(result.updated >= 1, "should sync the stale HTTP hook URL");
     const settings = readJson(settingsPath);
-    assert.ok(!settings.hooks.PermissionRequest, "PermissionRequest event should be deleted");
+    assert.ok(Array.isArray(settings.hooks.PermissionRequest));
+    assert.strictEqual(settings.hooks.PermissionRequest.length, 1, "no duplicate HTTP hook");
+    assert.strictEqual(settings.hooks.PermissionRequest[0].hooks[0].url, PERMISSION_URL);
   });
 
-  it("scrubs a legacy PermissionRequest command hook and preserves foreign entries", () => {
+  it("scrubs a legacy PermissionRequest command hook, preserves foreign entries, and adds the HTTP hook", () => {
     const settingsPath = makeTempSettingsFile({
       hooks: {
         PermissionRequest: [
@@ -187,14 +202,46 @@ describe("CodeBuddy hook installer", () => {
     const result = registerCodeBuddyHooks({
       silent: true,
       settingsPath,
+      port: 23333,
       nodeBin: "/usr/local/bin/node",
     });
 
     assert.ok(result.removed >= 1);
     const settings = readJson(settingsPath);
-    // Foreign (non-Clawd) entry survives
     assert.ok(Array.isArray(settings.hooks.PermissionRequest));
-    assert.strictEqual(settings.hooks.PermissionRequest.length, 1);
-    assert.ok(settings.hooks.PermissionRequest[0].hooks[0].command.includes("some-other-tool.js"));
+    // Foreign command entry survives + our HTTP hook was appended = 2 entries.
+    assert.strictEqual(settings.hooks.PermissionRequest.length, 2);
+    const foreign = settings.hooks.PermissionRequest.find(
+      (e) => e.hooks && e.hooks[0] && e.hooks[0].command && e.hooks[0].command.includes("some-other-tool.js")
+    );
+    assert.ok(foreign, "foreign command hook must survive");
+    const http = settings.hooks.PermissionRequest.find(
+      (e) => e.hooks && e.hooks[0] && e.hooks[0].type === "http"
+    );
+    assert.ok(http, "Clawd PermissionRequest HTTP hook must be present");
+    assert.strictEqual(http.hooks[0].url, PERMISSION_URL);
+    // The dead Clawd command hook is gone.
+    assert.ok(!settings.hooks.PermissionRequest.some(
+      (e) => e.hooks && e.hooks[0] && e.hooks[0].command && e.hooks[0].command.includes(MARKER)
+    ));
+  });
+
+  it("unregister removes both command hooks and the PermissionRequest HTTP hook", () => {
+    const settingsPath = makeTempSettingsFile({});
+    registerCodeBuddyHooks({ silent: true, settingsPath, port: 23333, nodeBin: "/usr/local/bin/node" });
+
+    const result = unregisterCodeBuddyHooks({ settingsPath });
+    assert.ok(result.removed >= 9, "should remove 8 command hooks + 1 HTTP hook");
+
+    const settings = readJson(settingsPath);
+    // No Clawd command hooks and no PermissionRequest HTTP hook remain.
+    for (const entries of Object.values(settings.hooks || {})) {
+      if (!Array.isArray(entries)) continue;
+      for (const entry of entries) {
+        const inner = Array.isArray(entry.hooks) ? entry.hooks : [];
+        assert.ok(!inner.some((h) => h && h.command && h.command.includes(MARKER)));
+        assert.ok(!inner.some((h) => h && h.type === "http" && h.url && h.url.includes("/permission")));
+      }
+    }
   });
 });

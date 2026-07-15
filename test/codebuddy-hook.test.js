@@ -5,7 +5,29 @@ const {
   buildPreToolUseOutput,
   parsePermissionResponse,
   permissionResultToOutput,
+  config,
+  CODEBUDDY_PROCESS_NAMES,
 } = require("../hooks/codebuddy-hook");
+
+describe("codebuddy-hook: process name coverage (CN vs international builds)", () => {
+  it("lists both international and CN executable names per platform", () => {
+    assert.ok(CODEBUDDY_PROCESS_NAMES.win.includes("codebuddy.exe"));
+    assert.ok(
+      CODEBUDDY_PROCESS_NAMES.win.includes("codebuddy cn.exe"),
+      "CN build ('CodeBuddy CN.exe' → 'codebuddy cn.exe') must be recognized"
+    );
+    assert.ok(CODEBUDDY_PROCESS_NAMES.mac.includes("codebuddy cn"));
+    assert.ok(CODEBUDDY_PROCESS_NAMES.linux.includes("codebuddy cn"));
+  });
+
+  it("recognizes the CN executable as both a terminal and an editor on Windows", () => {
+    if (process.platform !== "win32") return; // config is platform-specific at load time
+    // Windows snapshot lower-cases process names, so match against lower case.
+    assert.ok(config.terminalNames.has("codebuddy cn.exe"));
+    assert.strictEqual(config.editorMap["codebuddy cn.exe"], "codebuddy");
+    assert.strictEqual(config.editorMap["codebuddy.exe"], "codebuddy");
+  });
+});
 
 describe("codebuddy-hook: wantsApproval", () => {
   it("returns true only when tool_input.requires_approval === true", () => {

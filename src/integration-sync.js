@@ -54,7 +54,7 @@ function createIntegrationSyncRuntime(options = {}) {
     try {
       if (typeof ctx.syncCodeBuddyHooksImpl === "function") return ctx.syncCodeBuddyHooksImpl();
       const { registerCodeBuddyHooks } = require("../hooks/codebuddy-install.js");
-      const { added, updated } = registerCodeBuddyHooks({ silent: true });
+      const { added, updated } = registerCodeBuddyHooks({ silent: true, port: getHookServerPort() });
       if (added > 0 || updated > 0) {
         console.log(`Clawd: synced CodeBuddy hooks (added ${added}, updated ${updated})`);
       }
