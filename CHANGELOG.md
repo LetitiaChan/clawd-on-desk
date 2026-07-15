@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Internal / Refactor
+- **`scripts/release.js` now orchestrates the full release pipeline end-to-end, including CI triggering.** Previously the script stopped after `git push` of the tag and claimed "CI should start building" — which is factually wrong for this repo: `auto-tag.yml` creates the tag with `GITHUB_TOKEN`, which GitHub blocks from cascading into `build.yml` (see `project-continuity` §3 step 6 / `AGENT-PROGRESS` §6-22), so a bare tag push does not reliably start packaging. The script gained a step 9 that runs `gh workflow run build.yml --ref v<x.y.z>` and lists recent runs for confirmation (skippable via `--no-ci`, degrades to printed manual commands when `gh` is absent). It also: tolerates the expected tag-push rejection when `auto-tag.yml` wins the race (verifies the tag reached `origin` instead of aborting); auto-updates the `CHANGELOG.md` compare-link footer; accepts `patch`/`minor`/`major` bump keywords and a non-interactive `--yes` flag; and exports its pure helpers for unit testing.
+- **Added `test/release-script.test.js`** covering the pure logic (arg parsing, semver compare/bump, `[Unreleased]` close, footer rewrite, template render).
+- **Added `docs/investigations/release-automation-evaluation.md`** — decision record evaluating `changesets` / `semantic-release`: keep the bespoke `npm run release`, do not adopt `semantic-release`, defer `changesets` unless the contributor base grows.
+
 ---
 
 
@@ -206,7 +211,8 @@ The following versions predate this fork's divergence point and were tagged on t
 - **Pure internal documentation changes** (rules, progress notes, etc.) may skip CHANGELOG updates.
 - **No local packaging.** Per `project-continuity` rule §header, `electron-builder` and platform installer artifacts are produced **only** by `.github/workflows/build.yml` on tag push; never attach a locally-built installer to a GitHub Release. Local work stops at `npm test` + commit + push.
 
-[Unreleased]: https://github.com/LetitiaChan/clawd-on-desk/compare/v0.7.15...HEAD
+[Unreleased]: https://github.com/LetitiaChan/clawd-on-desk/compare/v0.7.16...HEAD
+[0.7.16]: https://github.com/LetitiaChan/clawd-on-desk/compare/v0.7.15...v0.7.16
 [0.7.15]: https://github.com/LetitiaChan/clawd-on-desk/compare/v0.7.14...v0.7.15
 [0.7.14]: https://github.com/LetitiaChan/clawd-on-desk/compare/v0.7.13...v0.7.14
 [0.7.13]: https://github.com/LetitiaChan/clawd-on-desk/compare/v0.7.12...v0.7.13
